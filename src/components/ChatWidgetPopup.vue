@@ -29,26 +29,36 @@
           v-for="conv in messagesStore.conversations"
           :key="conv.id"
           @click="openChat(conv.otherUser?.id || conv.participants.find(id => id !== authStore.user?.uid))"
-          class="p-3 hover:bg-gray-50 transition-colors cursor-pointer"
+          class="p-3 hover:bg-gray-50 transition-colors cursor-pointer relative"
         >
           <div class="flex items-center gap-3">
-            <img
-              v-if="conv.otherUser?.avatar"
-              :src="conv.otherUser.avatar"
-              :alt="conv.otherUser.displayName"
-              class="w-12 h-12 rounded-full object-cover"
-            />
-            <img
-              v-else
-              src="/user.png"
-              :alt="conv.otherUser?.displayName || 'User'"
-              class="w-12 h-12 rounded-full object-cover"
-            />
+            <div class="relative flex-shrink-0">
+              <img
+                v-if="conv.otherUser?.avatar"
+                :src="conv.otherUser.avatar"
+                :alt="conv.otherUser.displayName"
+                class="w-12 h-12 rounded-full object-cover"
+              />
+              <img
+                v-else
+                src="/user.png"
+                :alt="conv.otherUser?.displayName || 'User'"
+                class="w-12 h-12 rounded-full object-cover"
+              />
+              <span 
+                v-if="conv.unreadCount && conv.unreadCount > 0" 
+                class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] font-semibold"
+              >
+                {{ conv.unreadCount > 9 ? '9+' : conv.unreadCount }}
+              </span>
+            </div>
             <div class="flex-1 min-w-0">
-              <p class="font-semibold text-sm text-gray-900 truncate">
-                {{ conv.otherUser?.displayName || 'Người dùng' }}
-              </p>
-              <p class="text-xs text-gray-500 truncate">{{ conv.lastMessage || 'Chưa có tin nhắn' }}</p>
+              <div class="flex items-center justify-between gap-2">
+                <p class="font-semibold text-sm text-gray-900 truncate">
+                  {{ conv.otherUser?.displayName || 'Người dùng' }}
+                </p>
+              </div>
+              <p class="text-xs text-gray-500 truncate mt-0.5">{{ conv.lastMessage || 'Chưa có tin nhắn' }}</p>
             </div>
           </div>
         </div>
@@ -71,8 +81,14 @@ const messagesStore = useMessagesStore()
 
 let conversationsUnsubscribe = null
 
-const openChat = (userId) => {
+const openChat = async (userId) => {
   if (!userId) return
+  
+  // Mark messages as read when opening chat
+  if (authStore.user && userId) {
+    await messagesStore.markAsRead(authStore.user.uid, userId)
+  }
+  
   emit('openChat', userId)
   emit('close') // Close popup when opening chat
 }

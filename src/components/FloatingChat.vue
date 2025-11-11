@@ -341,18 +341,25 @@ onMounted(async () => {
   await loadUser()
   
   if (authStore.user && props.otherUserId) {
-    // Nếu KHÔNG phải auto-open (user click vào), mark as read ngay
+    // Mark as read immediately when opening chat (if not auto-open)
     if (!props.autoOpen) {
-      await markMessagesAsRead()
+      await messagesStore.markAsRead(authStore.user.uid, props.otherUserId)
+      hasMarkedAsRead.value = true
     } else {
       // Nếu auto-open, mark as read sau 3 giây (để user có thời gian thấy tin nhắn)
-      setTimeout(() => {
-        markMessagesAsRead()
+      setTimeout(async () => {
+        await messagesStore.markAsRead(authStore.user.uid, props.otherUserId)
+        hasMarkedAsRead.value = true
       }, 3000)
     }
     
-    messagesUnsubscribe = messagesStore.subscribeToMessages(authStore.user.uid, props.otherUserId)
+    // Subscribe to messages
+    messagesUnsubscribe = messagesStore.subscribeToMessages(
+      authStore.user.uid,
+      props.otherUserId
+    )
     
+    // Watch for new messages to auto-scroll
     watch(() => messagesStore.messages.length, () => {
       scrollToBottom()
     }, { immediate: true })

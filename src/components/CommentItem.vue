@@ -2,7 +2,7 @@
   <div class="comment-item">
     <!-- Main Comment -->
     <div class="flex gap-3">
-      <router-link :to="`/profile/${comment.userId}`" class="flex-shrink-0">
+      <router-link :to="`/profile/${comment.userId}`" class="flex-shrink-0" v-if="!comment.hidden || isOwnComment || isPostOwner">
         <img
           v-if="comment.userAvatar"
           :src="comment.userAvatar"
@@ -16,6 +16,7 @@
           class="avatar w-9 h-9"
         />
       </router-link>
+      <div v-else class="flex-shrink-0 w-9 h-9"></div>
       
       <div class="flex-1 min-w-0">
         <div 
@@ -23,37 +24,126 @@
           class="bg-gray-50 rounded-2xl px-4 py-2.5 transition-all duration-200"
           :class="{ 'ring-2 ring-blue-500 bg-blue-50': isHighlighted }"
         >
-          <!-- Reply To Info -->
-          <div v-if="comment.replyTo" class="mb-1.5">
-            <button
-              @click="scrollToComment(comment.replyTo.commentId)"
-              class="text-xs text-gray-500 hover:text-blue-500 transition-colors flex items-center gap-1"
-            >
-              <Icon name="arrowLeft" :size="12" class="rotate-180" />
-              <span>Phản hồi</span>
-              <span class="font-medium">
-                {{ comment.replyTo.userId === authStore.user?.uid ? 'bạn' : comment.replyTo.userDisplayName }}
-              </span>
-            </button>
-          </div>
+          <!-- Hidden Comment Message (for non-owners) -->
+          <template v-if="comment.hidden && !isOwnComment && !isPostOwner">
+            <div class="flex items-center justify-between mb-1">
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-sm text-gray-400">{{ comment.userDisplayName }}</span>
+                <span class="text-xs text-gray-400">{{ formatDate(comment.createdAt) }}</span>
+              </div>
+            </div>
+            <div class="text-sm text-gray-400 italic mb-2">
+              Bình luận này đã bị ẩn
+            </div>
+          </template>
           
-          <div class="flex items-center gap-2 mb-1">
-            <router-link 
-              :to="`/profile/${comment.userId}`" 
-                class="font-semibold text-sm text-gray-900 hover:text-blue-500 transition-colors"
-            >
-              {{ comment.userDisplayName }}
-            </router-link>
-            <span class="text-xs text-gray-500">{{ formatDate(comment.createdAt) }}</span>
-          </div>
-          
-          <!-- Comment Content -->
-          <div v-if="comment.content" class="text-sm text-gray-700 leading-relaxed mb-2">
-            {{ comment.content }}
-          </div>
-          
-          <!-- Comment File -->
-          <div v-if="comment.fileType" class="mb-2">
+          <!-- Comment Content (visible to owner/post owner or not hidden) -->
+          <template v-else>
+            <!-- Reply To Info -->
+            <div v-if="comment.replyTo" class="mb-1.5">
+              <button
+                @click="scrollToComment(comment.replyTo.commentId)"
+                class="text-xs text-gray-500 hover:text-blue-500 transition-colors flex items-center gap-1"
+              >
+                <Icon name="arrowLeft" :size="12" class="rotate-180" />
+                <span>Phản hồi</span>
+                <span class="font-medium">
+                  {{ comment.replyTo.userId === authStore.user?.uid ? 'bạn' : comment.replyTo.userDisplayName }}
+                </span>
+              </button>
+            </div>
+            
+            <div class="flex items-center justify-between mb-1">
+              <div class="flex items-center gap-2">
+                <router-link 
+                  :to="`/profile/${comment.userId}`" 
+                    class="font-semibold text-sm text-gray-900 hover:text-blue-500 transition-colors"
+                >
+                  {{ comment.userDisplayName }}
+                </router-link>
+                <span class="text-xs text-gray-500">{{ formatDate(comment.createdAt) }}</span>
+                <span v-if="comment.updatedAt" class="text-xs text-gray-400">(đã chỉnh sửa)</span>
+              </div>
+              
+              <!-- Comment Menu (only show for owner or post owner) -->
+              <div v-if="isOwnComment || isPostOwner" class="relative">
+                <button
+                  @click.stop="showMenu = !showMenu"
+                  class="p-1 rounded-full hover:bg-gray-200 transition-colors text-gray-500"
+                  title="Tùy chọn"
+                >
+                  <Icon name="more" :size="16" />
+                </button>
+                
+                <!-- Dropdown Menu -->
+                <Transition name="slide-down">
+                  <div
+                    v-if="showMenu"
+                    class="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
+                    @click.stop
+                  >
+                    <button
+                      v-if="isOwnComment"
+                      @click="handleEdit"
+                      class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <Icon name="edit" :size="16" />
+                      <span>Sửa</span>
+                    </button>
+                    <button
+                      v-if="isOwnComment"
+                      @click="handleDelete"
+                      class="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <Icon name="trash" :size="16" />
+                      <span>Xóa</span>
+                    </button>
+                    <button
+                      v-if="isPostOwner && !isOwnComment"
+                      @click="handleHide"
+                      class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <Icon :name="comment.hidden ? 'eye' : 'lock'" :size="16" />
+                      <span>{{ comment.hidden ? 'Hiện' : 'Ẩn' }}</span>
+                    </button>
+                  </div>
+                </Transition>
+              </div>
+            </div>
+            
+            <!-- Edit Form -->
+            <div v-if="isEditing" class="mb-2">
+              <textarea
+                v-model="editingContent"
+                rows="3"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+                placeholder="Nhập bình luận..."
+              ></textarea>
+              <div class="flex items-center gap-2 mt-2">
+                <button
+                  @click="handleSaveEdit"
+                  :disabled="saving || (!editingContent.trim() && !comment.fileType)"
+                  class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Lưu
+                </button>
+                <button
+                  @click="handleCancelEdit"
+                  :disabled="saving"
+                  class="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors disabled:opacity-50"
+                >
+                  Hủy
+                </button>
+              </div>
+            </div>
+            
+            <!-- Normal Comment Content (only show when not editing) -->
+            <div v-else-if="comment.content" class="text-sm text-gray-700 leading-relaxed mb-2">
+              {{ comment.content }}
+            </div>
+            
+            <!-- Comment File (only show if not editing) -->
+            <div v-if="comment.fileType && !isEditing" class="mb-2">
             <!-- Image -->
             <div v-if="comment.fileType === 'image'" class="flex justify-start items-start max-w-xs">
               <img
@@ -103,8 +193,8 @@
             </div>
           </div>
           
-          <!-- Comment Actions -->
-          <div class="flex items-center gap-4 mt-2">
+          <!-- Comment Actions (only show if not hidden or user is owner/post owner) -->
+          <div v-if="!comment.hidden || isOwnComment || isPostOwner" class="flex items-center gap-4 mt-2">
             <button
               @click="handleLike"
               class="flex items-center gap-1 text-xs text-gray-600 hover:text-red-500 transition-colors"
@@ -114,12 +204,14 @@
               <span v-if="likeCount > 0">{{ likeCount }}</span>
             </button>
             <button
+              v-if="!isEditing"
               @click="toggleReply"
               class="text-xs text-gray-600 hover:text-blue-500 transition-colors"
             >
               Phản hồi
             </button>
           </div>
+          </template>
         </div>
         
         <!-- Reply Input -->
@@ -142,6 +234,7 @@
             :post-id="postId"
             :parent-comment-id="comment.id"
             :depth="(depth || 0) + 1"
+            :post-user-id="postUserId"
           />
         </div>
       </div>
@@ -196,6 +289,10 @@ const props = defineProps({
   depth: {
     type: Number,
     default: 0
+  },
+  postUserId: {
+    type: String,
+    default: null
   }
 })
 
@@ -209,6 +306,18 @@ const replying = ref(false)
 const showImagePreview = ref(false)
 const previewImageUrl = ref('')
 const isHighlighted = ref(false)
+const showMenu = ref(false)
+const isEditing = ref(false)
+const editingContent = ref('')
+const saving = ref(false)
+
+const isOwnComment = computed(() => {
+  return props.comment.userId === authStore.user?.uid
+})
+
+const isPostOwner = computed(() => {
+  return props.postUserId === authStore.user?.uid
+})
 
 const isLiked = computed(() => {
   return props.comment.likes?.includes(authStore.user?.uid) || false
@@ -317,6 +426,109 @@ const openImagePreview = (imageUrl) => {
   showImagePreview.value = true
 }
 
+const handleEdit = () => {
+  showMenu.value = false
+  editingContent.value = props.comment.content || ''
+  isEditing.value = true
+}
+
+const handleCancelEdit = () => {
+  isEditing.value = false
+  editingContent.value = ''
+}
+
+const handleSaveEdit = async () => {
+  if (!editingContent.value.trim() && !props.comment.fileType) {
+    if (window.showToast) {
+      window.showToast('Bình luận không được để trống', 'error', '', 3000)
+    }
+    return
+  }
+  
+  saving.value = true
+  try {
+    const result = await postsStore.editComment(
+      props.postId,
+      props.comment.id,
+      editingContent.value.trim()
+    )
+    
+    if (result.success) {
+      isEditing.value = false
+      editingContent.value = ''
+      if (window.showToast) {
+        window.showToast('Đã cập nhật bình luận', 'success', '', 2000)
+      }
+    } else {
+      if (window.showToast) {
+        window.showToast('Không thể cập nhật bình luận', 'error', result.error || '', 3000)
+      }
+    }
+  } catch (error) {
+    console.error('Error editing comment:', error)
+    if (window.showToast) {
+      window.showToast('Không thể cập nhật bình luận', 'error', error.message || '', 3000)
+    }
+  } finally {
+    saving.value = false
+  }
+}
+
+const handleDelete = async () => {
+  showMenu.value = false
+  if (!confirm('Bạn có chắc muốn xóa bình luận này?')) {
+    return
+  }
+  
+  try {
+    const result = await postsStore.deleteComment(props.postId, props.comment.id)
+    
+    if (result.success) {
+      if (window.showToast) {
+        window.showToast('Đã xóa bình luận', 'success', '', 2000)
+      }
+    } else {
+      if (window.showToast) {
+        window.showToast('Không thể xóa bình luận', 'error', result.error || '', 3000)
+      }
+    }
+  } catch (error) {
+    console.error('Error deleting comment:', error)
+    if (window.showToast) {
+      window.showToast('Không thể xóa bình luận', 'error', error.message || '', 3000)
+    }
+  }
+}
+
+const handleHide = async () => {
+  showMenu.value = false
+  const hidden = !props.comment.hidden
+  const action = hidden ? 'ẩn' : 'hiện'
+  
+  if (!confirm(`Bạn có chắc muốn ${action} bình luận này?`)) {
+    return
+  }
+  
+  try {
+    const result = await postsStore.hideComment(props.postId, props.comment.id, hidden)
+    
+    if (result.success) {
+      if (window.showToast) {
+        window.showToast(`Đã ${action} bình luận`, 'success', '', 2000)
+      }
+    } else {
+      if (window.showToast) {
+        window.showToast(`Không thể ${action} bình luận`, 'error', result.error || '', 3000)
+      }
+    }
+  } catch (error) {
+    console.error('Error hiding comment:', error)
+    if (window.showToast) {
+      window.showToast(`Không thể ${action} bình luận`, 'error', error.message || '', 3000)
+    }
+  }
+}
+
 const scrollToComment = (commentId) => {
   // Find comment element
   const commentElement = document.getElementById(`comment-${commentId}`)
@@ -350,6 +562,24 @@ onMounted(() => {
         isHighlighted.value = false
       }, 2000)
     }, 100)
+  }
+  
+  // Close menu when clicking outside
+  const handleClickOutside = (event) => {
+    if (showMenu.value) {
+      const menuButton = event.target.closest('button[title="Tùy chọn"]')
+      const menu = event.target.closest('.absolute.right-0')
+      if (!menuButton && !menu) {
+        showMenu.value = false
+      }
+    }
+  }
+  
+  document.addEventListener('click', handleClickOutside)
+  
+  // Cleanup
+  return () => {
+    document.removeEventListener('click', handleClickOutside)
   }
 })
 </script>

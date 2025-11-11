@@ -119,14 +119,32 @@ const handleOpenChat = (userId) => {
 
 let conversationsUnsubscribe = null
 
+const updateUnreadMessagesCount = () => {
+  if (!authStore.user) return
+  
+  try {
+    // Count unread messages from conversations
+    const conversations = messagesStore.conversations
+    let count = 0
+    for (const conv of conversations) {
+      if (conv.unreadCount && conv.unreadCount > 0) {
+        count += conv.unreadCount
+      }
+    }
+    unreadMessagesCount.value = count
+  } catch (error) {
+    console.error('Error updating unread messages count:', error)
+  }
+}
+
 onMounted(() => {
   if (authStore.user) {
     conversationsUnsubscribe = messagesStore.subscribeToConversations(authStore.user.uid)
     
-    // Watch for unreadMessagesCount changes from store
-    watch(() => messagesStore.unreadMessagesCount, (newCount) => {
-      unreadMessagesCount.value = newCount
-    }, { immediate: true })
+    // Watch conversations to calculate unread count
+    watch(() => messagesStore.conversations, () => {
+      updateUnreadMessagesCount()
+    }, { deep: true, immediate: true })
   }
 })
 

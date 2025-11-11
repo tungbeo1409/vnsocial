@@ -160,9 +160,38 @@ export const useMessagesStore = defineStore('messages', () => {
     })
   }
 
-  // Subscribe to conversations for a user - ĐỜN GIẢN: chỉ load conversations, không tính unreadCount
+  // Subscribe to conversations for a user with realtime unread count
   const subscribeToConversations = (userId) => {
     const conversationsRef = collection(db, 'conversations')
+    const messageUnsubscribes = new Map() // Track unread message subscriptions
+    
+    // Helper function to subscribe to unread messages for a conversation
+    const subscribeToUnreadForConversation = (conversationId) => {
+      // Clean up existing subscription if any
+      if (messageUnsubscribes.has(conversationId)) {
+        messageUnsubscribes.get(conversationId)()
+      }
+      
+      const messagesRef = collection(db, 'conversations', conversationId, 'messages')
+      const unreadQuery = query(
+        messagesRef,
+        where('toUserId', '==', userId),
+        where('read', '==', false)
+      )
+      
+      const unsubscribe = onSnapshot(unreadQuery, (unreadSnapshot) => {
+        // Always find conversation by ID to update unreadCount (more reliable than index)
+        const conv = conversations.value.find(c => c.id === conversationId)
+        if (conv) {
+          conv.unreadCount = unreadSnapshot.size
+          console.log(`[MessagesStore] Updated unreadCount for conversation ${conversationId}: ${unreadSnapshot.size}`)
+        }
+      }, (error) => {
+        console.error(`Error subscribing to unread messages in conversation ${conversationId}:`, error)
+      })
+      
+      messageUnsubscribes.set(conversationId, unsubscribe)
+    }
     
     // Try with orderBy first
     const q = query(
@@ -171,13 +200,20 @@ export const useMessagesStore = defineStore('messages', () => {
       orderBy('lastMessageTime', 'desc')
     )
 
-    return onSnapshot(q, async (snapshot) => {
+    const unsubscribeConversations = onSnapshot(q, async (snapshot) => {
+      // Clean up old message subscriptions
+      messageUnsubscribes.forEach((unsub) => unsub())
+      messageUnsubscribes.clear()
+      
       const convs = []
-      for (const docSnap of snapshot.docs) {
+      for (let i = 0; i < snapshot.docs.length; i++) {
+        const docSnap = snapshot.docs[i]
         const data = docSnap.data()
         const otherUserId = data.participants.find(id => id !== userId)
         
         if (!otherUserId) continue
+        
+        const conversationId = docSnap.id
         
         // Get other user's info
         try {
@@ -186,19 +222,24 @@ export const useMessagesStore = defineStore('messages', () => {
             ? { id: otherUserDoc.id, ...otherUserDoc.data() }
             : null
 
-          convs.push({
-            id: docSnap.id,
+          // Create conversation with initial unreadCount = 0
+          const conversation = {
+            id: conversationId,
             ...data,
             otherUser,
+            unreadCount: 0,
             lastMessageTime: data.lastMessageTime?.toDate?.() || data.lastMessageTime || new Date()
-          })
+          }
+          
+          convs.push(conversation)
         } catch (error) {
           console.error('Error loading user info:', error)
           // Still add conversation without user info
           convs.push({
-            id: docSnap.id,
+            id: conversationId,
             ...data,
             otherUser: null,
+            unreadCount: 0,
             lastMessageTime: data.lastMessageTime?.toDate?.() || data.lastMessageTime || new Date()
           })
         }
@@ -212,6 +253,11 @@ export const useMessagesStore = defineStore('messages', () => {
       })
       
       conversations.value = convs
+      
+      // Subscribe to unread messages for each conversation (realtime)
+      convs.forEach((conv) => {
+        subscribeToUnreadForConversation(conv.id)
+      })
     }, (error) => {
       console.error('Error in conversations subscription:', error)
       
@@ -223,12 +269,19 @@ export const useMessagesStore = defineStore('messages', () => {
           where('participants', 'array-contains', userId)
         )
         
-        return onSnapshot(simpleQ, async (snapshot) => {
+        const unsubscribeSimple = onSnapshot(simpleQ, async (snapshot) => {
+          // Clean up old message subscriptions
+          messageUnsubscribes.forEach((unsub) => unsub())
+          messageUnsubscribes.clear()
+          
           const convs = []
-          for (const docSnap of snapshot.docs) {
+          for (let i = 0; i < snapshot.docs.length; i++) {
+            const docSnap = snapshot.docs[i]
             const data = docSnap.data()
             const otherUserId = data.participants.find(id => id !== userId)
             if (!otherUserId) continue
+            
+            const conversationId = docSnap.id
             
             try {
               const otherUserDoc = await getDoc(doc(db, 'users', otherUserId))
@@ -236,12 +289,16 @@ export const useMessagesStore = defineStore('messages', () => {
                 ? { id: otherUserDoc.id, ...otherUserDoc.data() }
                 : null
 
-              convs.push({
-                id: docSnap.id,
+              // Create conversation with initial unreadCount = 0
+              const conversation = {
+                id: conversationId,
                 ...data,
                 otherUser,
+                unreadCount: 0,
                 lastMessageTime: data.lastMessageTime?.toDate?.() || data.lastMessageTime || new Date()
-              })
+              }
+              
+              convs.push(conversation)
             } catch (err) {
               console.error('Error loading user info:', err)
             }
@@ -255,9 +312,28 @@ export const useMessagesStore = defineStore('messages', () => {
           })
           
           conversations.value = convs
+          
+          // Subscribe to unread messages for each conversation (realtime)
+          convs.forEach((conv) => {
+            subscribeToUnreadForConversation(conv.id)
+          })
         })
+        
+        // Replace the unsubscribe function to handle simple query cleanup
+        return () => {
+          unsubscribeSimple()
+          messageUnsubscribes.forEach((unsub) => unsub())
+          messageUnsubscribes.clear()
+        }
       }
     })
+    
+    // Return cleanup function
+    return () => {
+      unsubscribeConversations()
+      messageUnsubscribes.forEach((unsub) => unsub())
+      messageUnsubscribes.clear()
+    }
   }
 
   // Mark messages as read - ĐỜN GIẢN: chỉ update read: true
@@ -281,6 +357,13 @@ export const useMessagesStore = defineStore('messages', () => {
           batch.update(messageRef, { read: true })
         })
         await batch.commit()
+        
+        // Immediately update unreadCount in conversations array (optimistic update)
+        const conv = conversations.value.find(c => c.id === conversationId)
+        if (conv) {
+          conv.unreadCount = 0
+          console.log(`[MessagesStore] Marked ${snapshot.size} messages as read for conversation ${conversationId}`)
+        }
       }
       
       return { success: true }
@@ -327,7 +410,7 @@ export const useMessagesStore = defineStore('messages', () => {
 
   // Subscribe to all unread messages for a user - để detect tin nhắn mới và tự động mở popup
   // ĐỜN GIẢN: Subscribe đến tất cả conversations, với mỗi conversation subscribe đến unread messages
-  const subscribeToUnreadMessages = (userId, onNewMessage) => {
+  const subscribeToUnreadMessages = (userId, onNewMessage = null) => {
     const unsubscribes = []
     const conversationUnreadCounts = {} // Map conversationId -> unreadCount
     

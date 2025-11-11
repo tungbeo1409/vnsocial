@@ -603,6 +603,159 @@ export const usePostsStore = defineStore('posts', () => {
     }
   }
 
+  // Helper function to find and update comment in nested structure
+  const findAndUpdateComment = (comments, commentId, updater, isReply = false, parentCommentId = null) => {
+    for (let i = 0; i < comments.length; i++) {
+      // Check if this is the comment we're looking for
+      if (comments[i].id === commentId) {
+        updater(comments[i], i, comments)
+        return true
+      }
+      
+      // Check in replies recursively
+      if (comments[i].replies && Array.isArray(comments[i].replies) && comments[i].replies.length > 0) {
+        if (findAndUpdateComment(comments[i].replies, commentId, updater, true, comments[i].id)) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  // Edit comment
+  const editComment = async (postId, commentId, newContent, newFileData = null) => {
+    try {
+      const postRef = doc(db, 'posts', postId)
+      const postDoc = await getDoc(postRef)
+      const post = postDoc.exists() ? postDoc.data() : null
+      
+      if (!post || !post.comments) {
+        return { success: false, error: 'Post or comments not found' }
+      }
+
+      // Deep clone comments array
+      const comments = JSON.parse(JSON.stringify(post.comments))
+      
+      // Find and update comment
+      const found = findAndUpdateComment(comments, commentId, (comment) => {
+        comment.content = newContent || comment.content
+        comment.updatedAt = new Date().toISOString()
+        
+        // Update file data if provided
+        if (newFileData) {
+          comment.fileType = newFileData.type
+          comment.fileData = newFileData.data
+          comment.fileName = newFileData.filename || null
+          comment.fileSize = newFileData.size || null
+          comment.mimeType = newFileData.mimeType || null
+          if (newFileData.duration) {
+            comment.duration = newFileData.duration
+          }
+        } else {
+          // Remove file data if editing to text-only comment
+          if (!newContent) {
+            // Keep file if no new content provided
+          } else {
+            // Optionally remove file when editing to text
+            // comment.fileType = null
+            // comment.fileData = null
+          }
+        }
+      })
+      
+      if (found) {
+        await updateDoc(postRef, { comments })
+        return { success: true }
+      }
+      
+      return { success: false, error: 'Comment not found' }
+    } catch (error) {
+      console.error('Error editing comment:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Delete comment (recursive helper)
+  const recursiveDeleteComment = (commentList, commentId) => {
+    for (let i = 0; i < commentList.length; i++) {
+      if (commentList[i].id === commentId) {
+        commentList.splice(i, 1)
+        return true
+      }
+      if (commentList[i].replies && Array.isArray(commentList[i].replies) && commentList[i].replies.length > 0) {
+        if (recursiveDeleteComment(commentList[i].replies, commentId)) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  // Delete comment
+  const deleteComment = async (postId, commentId) => {
+    try {
+      const postRef = doc(db, 'posts', postId)
+      const postDoc = await getDoc(postRef)
+      const post = postDoc.exists() ? postDoc.data() : null
+      
+      if (!post || !post.comments) {
+        return { success: false, error: 'Post or comments not found' }
+      }
+
+      // Deep clone comments array
+      const comments = JSON.parse(JSON.stringify(post.comments))
+      
+      // Find and remove comment recursively
+      const found = recursiveDeleteComment(comments, commentId)
+      
+      if (found) {
+        await updateDoc(postRef, { comments })
+        return { success: true }
+      }
+      
+      return { success: false, error: 'Comment not found' }
+    } catch (error) {
+      console.error('Error deleting comment:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // Hide comment (set hidden flag, owner and post owner can still see)
+  const hideComment = async (postId, commentId, hidden = true) => {
+    try {
+      const postRef = doc(db, 'posts', postId)
+      const postDoc = await getDoc(postRef)
+      const post = postDoc.exists() ? postDoc.data() : null
+      
+      if (!post || !post.comments) {
+        return { success: false, error: 'Post or comments not found' }
+      }
+
+      // Deep clone comments array
+      const comments = JSON.parse(JSON.stringify(post.comments))
+      
+      // Find and update comment
+      const found = findAndUpdateComment(comments, commentId, (comment) => {
+        comment.hidden = hidden
+        if (hidden) {
+          comment.hiddenAt = new Date().toISOString()
+        } else {
+          comment.hiddenAt = null
+        }
+      })
+      
+      if (found) {
+        await updateDoc(postRef, { comments })
+        return { success: true }
+      }
+      
+      return { success: false, error: 'Comment not found' }
+    } catch (error) {
+      console.error('Error hiding comment:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
   return {
     posts,
     loading,
@@ -612,7 +765,10 @@ export const usePostsStore = defineStore('posts', () => {
     addComment,
     likeComment,
     updatePost,
-    deletePost
+    deletePost,
+    editComment,
+    deleteComment,
+    hideComment
   }
 })
 

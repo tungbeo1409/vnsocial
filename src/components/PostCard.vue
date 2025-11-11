@@ -261,6 +261,7 @@
             :key="comment.id"
             :comment="comment"
             :post-id="post.id"
+            :post-user-id="post.userId"
           />
         </div>
         

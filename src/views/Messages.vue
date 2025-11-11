@@ -19,20 +19,29 @@
               v-for="conversation in messagesStore.conversations"
               :key="conversation.id"
               :to="`/chat/${conversation.otherUser?.id || conversation.participants.find(id => id !== authStore.user?.uid)}`"
-              class="flex items-center gap-4 p-4 rounded-2xl hover:bg-gray-50 transition-all duration-200 group animate-fade-in"
+              @click="handleConversationClick(conversation.otherUser?.id || conversation.participants.find(id => id !== authStore.user?.uid))"
+              class="flex items-center gap-4 p-4 rounded-2xl hover:bg-gray-50 transition-all duration-200 group animate-fade-in relative"
             >
-              <img
-                v-if="conversation.otherUser?.avatar"
-                :src="conversation.otherUser.avatar"
-                :alt="conversation.otherUser.displayName"
-                class="avatar-hover w-14 h-14"
-              />
-              <img
-                v-else
-                src="/user.png"
-                :alt="conversation.otherUser?.displayName || 'User'"
-                class="avatar-hover w-14 h-14"
-              />
+              <div class="relative flex-shrink-0">
+                <img
+                  v-if="conversation.otherUser?.avatar"
+                  :src="conversation.otherUser.avatar"
+                  :alt="conversation.otherUser.displayName"
+                  class="avatar-hover w-14 h-14"
+                />
+                <img
+                  v-else
+                  src="/user.png"
+                  :alt="conversation.otherUser?.displayName || 'User'"
+                  class="avatar-hover w-14 h-14"
+                />
+                <span 
+                  v-if="conversation.unreadCount && conversation.unreadCount > 0" 
+                  class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-semibold"
+                >
+                  {{ conversation.unreadCount > 9 ? '9+' : conversation.unreadCount }}
+                </span>
+              </div>
               
               <div class="flex-1 min-w-0">
                 <p class="font-semibold text-gray-900 truncate mb-0.5">
@@ -79,6 +88,13 @@ const messagesStore = useMessagesStore()
 
 const loading = ref(true)
 let unsubscribe = null
+
+const handleConversationClick = async (userId) => {
+  // Mark messages as read when clicking on conversation
+  if (authStore.user && userId) {
+    await messagesStore.markAsRead(authStore.user.uid, userId)
+  }
+}
 
 onMounted(() => {
   if (authStore.user) {
