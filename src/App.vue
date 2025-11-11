@@ -63,19 +63,45 @@ const closeAllFloatingChats = () => {
   openChats.value = []
 }
 
+// Play notification sound when new message arrives
+const playMessageSound = () => {
+  try {
+    const audio = new Audio('/audio/ring_mess.mp3')
+    audio.volume = 0.5 // Set volume to 50%
+    audio.play().catch(err => {
+      // Silently handle autoplay restrictions
+      console.warn('Could not play message sound:', err.message)
+    })
+  } catch (error) {
+    console.warn('Error playing message sound:', error.message)
+  }
+}
+
 // Handler khi có tin nhắn mới - tự động mở popup
 const handleNewMessage = (fromUserId, message) => {
-  // Don't auto-open popup if on messages page
-  if (isMessagesPage()) {
-    return
-  }
-  
-  // Kiểm tra xem chat đã mở chưa
-  const existingChat = openChats.value.find(chat => chat.userId === fromUserId)
-  if (!existingChat) {
-    // Kiểm tra xem tin nhắn có thực sự chưa đọc không (double check)
-    // Chỉ auto-open nếu message chưa được đọc
-    if (message && message.read === false && message.toUserId === authStore.user?.uid) {
+  // Kiểm tra xem tin nhắn có thực sự chưa đọc không
+  if (message && message.read === false && message.toUserId === authStore.user?.uid) {
+    // Kiểm tra xem user có đang xem chat với người gửi không
+    const isViewingThisChat = route.path === `/chat/${fromUserId}`
+    
+    // Kiểm tra xem có floating chat đang mở với người gửi không
+    const hasFloatingChatOpen = openChats.value.some(chat => chat.userId === fromUserId)
+    
+    // Chỉ phát âm thanh nếu:
+    // 1. Không đang xem chat với người gửi trong route
+    // 2. Không có floating chat đang mở (hoặc có nhưng đang ở trang khác)
+    // Phát âm thanh để thông báo có tin nhắn mới
+    if (!isViewingThisChat) {
+      playMessageSound()
+    }
+    
+    // Don't auto-open popup if on messages page
+    if (isMessagesPage()) {
+      return
+    }
+    
+    // Kiểm tra xem chat đã mở chưa
+    if (!hasFloatingChatOpen) {
       // Tự động mở popup chat với người gửi (autoOpen = true để không mark as read ngay)
       openFloatingChat(fromUserId, { autoOpen: true })
       console.log(`[App] Auto-opened chat with ${fromUserId} due to new unread message`)

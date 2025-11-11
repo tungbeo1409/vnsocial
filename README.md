@@ -108,36 +108,52 @@ npm run build
 
 ## Deploy lên GitHub Pages
 
-### 1. Cập nhật base path trong `vite.config.js`
+### Cách 1: Sử dụng GitHub Actions (Khuyến nghị)
 
-Nếu repository của bạn là `https://github.com/username/News`, thì base path đã được set là `/News/`.
+Project đã được cấu hình sẵn với GitHub Actions để tự động deploy.
 
-Nếu repository khác, thay đổi:
+1. **Push code lên GitHub**:
+   ```bash
+   git add .
+   git commit -m "Initial commit"
+   git remote add origin https://github.com/YOUR_USERNAME/News.git
+   git push -u origin main
+   ```
 
-```javascript
-base: '/your-repo-name/'
-```
+2. **Bật GitHub Pages**:
+   - Vào repository > Settings > Pages
+   - Source: chọn **"GitHub Actions"**
+   - Save
 
-### 2. Deploy
+3. **Cấu hình Firebase**:
+   - Vào Firebase Console > Authentication > Settings > Authorized domains
+   - Thêm domain: `YOUR_USERNAME.github.io`
+   - Xem chi tiết trong file `FIREBASE_GITHUB_PAGES_SETUP.md`
 
-```bash
-npm run build
-```
+4. **Kiểm tra deployment**:
+   - GitHub Actions sẽ tự động build và deploy
+   - Truy cập: `https://YOUR_USERNAME.github.io/News/`
 
-Sau đó commit và push thư mục `dist` lên GitHub:
+### Cách 2: Deploy thủ công
 
-```bash
-git add dist
-git commit -m "Deploy to GitHub Pages"
-git push
-```
+1. **Cập nhật base path** trong `vite.config.js`:
+   ```javascript
+   const REPO_NAME = '/News/' // Thay đổi thành tên repo của bạn
+   ```
 
-### 3. Bật GitHub Pages
+2. **Build**:
+   ```bash
+   npm run build
+   ```
 
-1. Vào repository trên GitHub
-2. Settings > Pages
-3. Source: chọn branch `main` và folder `/dist`
-4. Save
+3. **Deploy**:
+   - Push thư mục `dist` lên branch `gh-pages`
+   - Hoặc sử dụng GitHub Pages với source là folder `/dist`
+
+### Xem hướng dẫn chi tiết
+
+- **Deploy GitHub Pages**: Xem file `DEPLOY_GITHUB_PAGES.md`
+- **Cấu hình Firebase**: Xem file `FIREBASE_GITHUB_PAGES_SETUP.md`
 
 ## Cấu trúc thư mục
 

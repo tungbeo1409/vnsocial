@@ -261,10 +261,13 @@ const handleScroll = () => {
     // Track if user is near bottom (within 200px)
     isNearBottom.value = distanceFromBottom < 200
     
-    // If scroll near bottom (within 100px), mark as read
+    // If scroll near bottom (within 100px), mark as read (fail silently)
     if (distanceFromBottom < 100) {
       if (authStore.user && otherUserId.value) {
-        messagesStore.markAsRead(authStore.user.uid, otherUserId.value)
+        messagesStore.markAsRead(authStore.user.uid, otherUserId.value).catch(err => {
+          // Silently handle - permissions issue will be handled in markAsRead function
+          console.warn('Could not mark messages as read:', err.message)
+        })
       }
     }
   }
@@ -274,8 +277,11 @@ onMounted(async () => {
   // Load other user info
   otherUser.value = await friendsStore.getUserById(otherUserId.value)
   
-  // Mark messages as read when opening chat
-  await messagesStore.markAsRead(authStore.user.uid, otherUserId.value)
+  // Mark messages as read when opening chat (don't wait for it, continue even if it fails)
+  messagesStore.markAsRead(authStore.user.uid, otherUserId.value).catch(err => {
+    // Silently handle - permissions issue will be handled in markAsRead function
+    console.warn('Could not mark messages as read:', err.message)
+  })
   
   // Subscribe to messages
   unsubscribe = messagesStore.subscribeToMessages(
@@ -307,8 +313,10 @@ onMounted(async () => {
         otherUserId.value = newUserId
         otherUser.value = await friendsStore.getUserById(newUserId)
         
-        // Mark messages as read when switching to different chat
-        await messagesStore.markAsRead(authStore.user.uid, newUserId)
+        // Mark messages as read when switching to different chat (don't wait for it)
+        messagesStore.markAsRead(authStore.user.uid, newUserId).catch(err => {
+          console.warn('Could not mark messages as read:', err.message)
+        })
         
         // Unsubscribe from previous messages
         if (unsubscribe) {

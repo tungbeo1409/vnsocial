@@ -2,6 +2,10 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 
+// ⚠️ QUAN TRỌNG: Thay đổi REPO_NAME thành tên repository GitHub của bạn
+// Repository name: vnsocial
+const REPO_NAME = '/vnsocial/'
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -9,8 +13,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src')
     }
   },
-  // Chỉ dùng base path khi build production (cho GitHub Pages)
-  // Khi dev local, để base: '/' hoặc không set
-  base: process.env.NODE_ENV === 'production' ? '/News/' : '/'
+  // Base path cho GitHub Pages
+  // Development: sử dụng '/' (localhost)
+  // Production: sử dụng repo name (GitHub Pages)
+  base: process.env.NODE_ENV === 'production' ? REPO_NAME : '/'
 })
 

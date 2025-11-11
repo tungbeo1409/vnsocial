@@ -207,11 +207,14 @@ export const useFriendsStore = defineStore('friends', () => {
       const userDoc = await getDoc(doc(db, 'users', userId))
       if (userDoc.exists()) {
         const userData = userDoc.data()
-        const requestIds = userData.friendRequests || []
+        // Ensure friendRequests is an array
+        const requestIds = Array.isArray(userData.friendRequests) ? userData.friendRequests : []
         
         // Get user details for each request
         const requests = await Promise.all(
           requestIds.map(async (requestId) => {
+            // Ensure requestId is a valid string
+            if (!requestId || typeof requestId !== 'string') return null
             const requestUser = await getUserById(requestId)
             return requestUser
           })
@@ -232,11 +235,14 @@ export const useFriendsStore = defineStore('friends', () => {
       const userDoc = await getDoc(doc(db, 'users', userId))
       if (userDoc.exists()) {
         const userData = userDoc.data()
-        const friendIds = userData.friends || []
+        // Ensure friends is an array
+        const friendIds = Array.isArray(userData.friends) ? userData.friends : []
         
         // Get user details for each friend
         const friendsList = await Promise.all(
           friendIds.map(async (friendId) => {
+            // Ensure friendId is a valid string
+            if (!friendId || typeof friendId !== 'string') return null
             const friend = await getUserById(friendId)
             return friend
           })
@@ -258,9 +264,10 @@ export const useFriendsStore = defineStore('friends', () => {
       if (!currentUserDoc.exists()) return 'none'
 
       const userData = currentUserDoc.data()
-      const friends = userData.friends || []
-      const sentRequests = userData.sentRequests || []
-      const friendRequests = userData.friendRequests || []
+      // Ensure all are arrays
+      const friends = Array.isArray(userData.friends) ? userData.friends : []
+      const sentRequests = Array.isArray(userData.sentRequests) ? userData.sentRequests : []
+      const friendRequests = Array.isArray(userData.friendRequests) ? userData.friendRequests : []
 
       if (friends.includes(targetUserId)) {
         return 'friends'
