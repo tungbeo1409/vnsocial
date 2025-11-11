@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container pb-20">
+  <div class="page-container" style="padding-bottom: 0;">
     <!-- Top Navigation Bar -->
     <TopNavBar />
 

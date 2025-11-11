@@ -2,7 +2,7 @@
   <div class="comment-item">
     <!-- Main Comment -->
     <div class="flex gap-3">
-      <router-link :to="`/profile/${comment.userId}`" class="flex-shrink-0" v-if="!comment.hidden || isOwnComment || isPostOwner">
+      <router-link :to="`/profile/${comment.userId}`" class="flex-shrink-0">
         <img
           v-if="comment.userAvatar"
           :src="comment.userAvatar"
@@ -16,7 +16,6 @@
           class="avatar w-9 h-9"
         />
       </router-link>
-      <div v-else class="flex-shrink-0 w-9 h-9"></div>
       
       <div class="flex-1 min-w-0">
         <div 
@@ -24,126 +23,111 @@
           class="bg-gray-50 rounded-2xl px-4 py-2.5 transition-all duration-200"
           :class="{ 'ring-2 ring-blue-500 bg-blue-50': isHighlighted }"
         >
-          <!-- Hidden Comment Message (for non-owners) -->
-          <template v-if="comment.hidden && !isOwnComment && !isPostOwner">
-            <div class="flex items-center justify-between mb-1">
-              <div class="flex items-center gap-2">
-                <span class="font-semibold text-sm text-gray-400">{{ comment.userDisplayName }}</span>
-                <span class="text-xs text-gray-400">{{ formatDate(comment.createdAt) }}</span>
-              </div>
-            </div>
-            <div class="text-sm text-gray-400 italic mb-2">
-              Bình luận này đã bị ẩn
-            </div>
-          </template>
+          <!-- Reply To Info -->
+          <div v-if="comment.replyTo" class="mb-1.5">
+            <button
+              @click="scrollToComment(comment.replyTo.commentId)"
+              class="text-xs text-gray-500 hover:text-blue-500 transition-colors flex items-center gap-1"
+            >
+              <Icon name="arrowLeft" :size="12" class="rotate-180" />
+              <span>Phản hồi</span>
+              <span class="font-medium">
+                {{ comment.replyTo.userId === authStore.user?.uid ? 'bạn' : comment.replyTo.userDisplayName }}
+              </span>
+            </button>
+          </div>
           
-          <!-- Comment Content (visible to owner/post owner or not hidden) -->
-          <template v-else>
-            <!-- Reply To Info -->
-            <div v-if="comment.replyTo" class="mb-1.5">
-              <button
-                @click="scrollToComment(comment.replyTo.commentId)"
-                class="text-xs text-gray-500 hover:text-blue-500 transition-colors flex items-center gap-1"
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center gap-2">
+              <router-link 
+                :to="`/profile/${comment.userId}`" 
+                class="font-semibold text-sm text-gray-900 hover:text-blue-500 transition-colors"
               >
-                <Icon name="arrowLeft" :size="12" class="rotate-180" />
-                <span>Phản hồi</span>
-                <span class="font-medium">
-                  {{ comment.replyTo.userId === authStore.user?.uid ? 'bạn' : comment.replyTo.userDisplayName }}
-                </span>
+                {{ comment.userDisplayName }}
+              </router-link>
+              <span class="text-xs text-gray-500">{{ formatDate(comment.createdAt) }}</span>
+              <span v-if="comment.updatedAt" class="text-xs text-gray-400">(đã chỉnh sửa)</span>
+            </div>
+            
+            <!-- Comment Menu (show for everyone, but options differ) -->
+            <div class="relative">
+              <button
+                @click.stop="showMenu = !showMenu"
+                class="p-1 rounded-full hover:bg-gray-200 transition-colors text-gray-500"
+                title="Tùy chọn"
+              >
+                <Icon name="more" :size="16" />
+              </button>
+              
+              <!-- Dropdown Menu -->
+              <Transition name="slide-down">
+                <div
+                  v-if="showMenu"
+                  class="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
+                  @click.stop
+                >
+                  <button
+                    v-if="isOwnComment"
+                    @click="handleEdit"
+                    class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <Icon name="edit" :size="16" />
+                    <span>Sửa</span>
+                  </button>
+                  <button
+                    v-if="isOwnComment || isPostOwner"
+                    @click="handleDelete"
+                    class="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <Icon name="trash" :size="16" />
+                    <span>Xóa</span>
+                  </button>
+                  <button
+                    v-if="!isOwnComment"
+                    @click="handleReport"
+                    class="w-full px-4 py-2 text-left text-sm text-orange-600 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <Icon name="flag" :size="16" />
+                    <span>Báo cáo</span>
+                  </button>
+                </div>
+              </Transition>
+            </div>
+          </div>
+          
+          <!-- Edit Form -->
+          <div v-if="isEditing" class="mb-2">
+            <textarea
+              v-model="editingContent"
+              rows="3"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+              placeholder="Nhập bình luận..."
+            ></textarea>
+            <div class="flex items-center gap-2 mt-2">
+              <button
+                @click="handleSaveEdit"
+                :disabled="saving || (!editingContent.trim() && !comment.fileType)"
+                class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Lưu
+              </button>
+              <button
+                @click="handleCancelEdit"
+                :disabled="saving"
+                class="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors disabled:opacity-50"
+              >
+                Hủy
               </button>
             </div>
-            
-            <div class="flex items-center justify-between mb-1">
-              <div class="flex items-center gap-2">
-                <router-link 
-                  :to="`/profile/${comment.userId}`" 
-                    class="font-semibold text-sm text-gray-900 hover:text-blue-500 transition-colors"
-                >
-                  {{ comment.userDisplayName }}
-                </router-link>
-                <span class="text-xs text-gray-500">{{ formatDate(comment.createdAt) }}</span>
-                <span v-if="comment.updatedAt" class="text-xs text-gray-400">(đã chỉnh sửa)</span>
-              </div>
-              
-              <!-- Comment Menu (only show for owner or post owner) -->
-              <div v-if="isOwnComment || isPostOwner" class="relative">
-                <button
-                  @click.stop="showMenu = !showMenu"
-                  class="p-1 rounded-full hover:bg-gray-200 transition-colors text-gray-500"
-                  title="Tùy chọn"
-                >
-                  <Icon name="more" :size="16" />
-                </button>
-                
-                <!-- Dropdown Menu -->
-                <Transition name="slide-down">
-                  <div
-                    v-if="showMenu"
-                    class="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
-                    @click.stop
-                  >
-                    <button
-                      v-if="isOwnComment"
-                      @click="handleEdit"
-                      class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <Icon name="edit" :size="16" />
-                      <span>Sửa</span>
-                    </button>
-                    <button
-                      v-if="isOwnComment"
-                      @click="handleDelete"
-                      class="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <Icon name="trash" :size="16" />
-                      <span>Xóa</span>
-                    </button>
-                    <button
-                      v-if="isPostOwner && !isOwnComment"
-                      @click="handleHide"
-                      class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <Icon :name="comment.hidden ? 'eye' : 'lock'" :size="16" />
-                      <span>{{ comment.hidden ? 'Hiện' : 'Ẩn' }}</span>
-                    </button>
-                  </div>
-                </Transition>
-              </div>
-            </div>
-            
-            <!-- Edit Form -->
-            <div v-if="isEditing" class="mb-2">
-              <textarea
-                v-model="editingContent"
-                rows="3"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
-                placeholder="Nhập bình luận..."
-              ></textarea>
-              <div class="flex items-center gap-2 mt-2">
-                <button
-                  @click="handleSaveEdit"
-                  :disabled="saving || (!editingContent.trim() && !comment.fileType)"
-                  class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Lưu
-                </button>
-                <button
-                  @click="handleCancelEdit"
-                  :disabled="saving"
-                  class="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors disabled:opacity-50"
-                >
-                  Hủy
-                </button>
-              </div>
-            </div>
-            
-            <!-- Normal Comment Content (only show when not editing) -->
-            <div v-else-if="comment.content" class="text-sm text-gray-700 leading-relaxed mb-2">
-              {{ comment.content }}
-            </div>
-            
-            <!-- Comment File (only show if not editing) -->
-            <div v-if="comment.fileType && !isEditing" class="mb-2">
+          </div>
+          
+          <!-- Normal Comment Content (only show when not editing) -->
+          <div v-else-if="comment.content" class="text-sm text-gray-700 leading-relaxed mb-2">
+            {{ comment.content }}
+          </div>
+          
+          <!-- Comment File (only show if not editing) -->
+          <div v-if="comment.fileType && !isEditing" class="mb-2">
             <!-- Image -->
             <div v-if="comment.fileType === 'image'" class="flex justify-start items-start max-w-xs">
               <img
@@ -193,8 +177,8 @@
             </div>
           </div>
           
-          <!-- Comment Actions (only show if not hidden or user is owner/post owner) -->
-          <div v-if="!comment.hidden || isOwnComment || isPostOwner" class="flex items-center gap-4 mt-2">
+          <!-- Comment Actions -->
+          <div class="flex items-center gap-4 mt-2">
             <button
               @click="handleLike"
               class="flex items-center gap-1 text-xs text-gray-600 hover:text-red-500 transition-colors"
@@ -211,7 +195,6 @@
               Phản hồi
             </button>
           </div>
-          </template>
         </div>
         
         <!-- Reply Input -->
@@ -259,6 +242,87 @@
         >
           ✕
         </button>
+      </div>
+    </Transition>
+    
+    <!-- Report Modal -->
+    <Transition name="fade">
+      <div
+        v-if="showReportModal"
+        @click="handleCancelReport"
+        class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      >
+        <div
+          @click.stop
+          class="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl"
+        >
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">Báo cáo bình luận</h3>
+          
+          <div class="space-y-3 mb-4">
+            <label class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer">
+              <input
+                type="radio"
+                v-model="reportReason"
+                value="Spam"
+                class="w-4 h-4 text-blue-600"
+              />
+              <span class="text-sm text-gray-700">Spam hoặc lừa đảo</span>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer">
+              <input
+                type="radio"
+                v-model="reportReason"
+                value="Nội dung không phù hợp"
+                class="w-4 h-4 text-blue-600"
+              />
+              <span class="text-sm text-gray-700">Nội dung không phù hợp</span>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer">
+              <input
+                type="radio"
+                v-model="reportReason"
+                value="Quấy rối"
+                class="w-4 h-4 text-blue-600"
+              />
+              <span class="text-sm text-gray-700">Quấy rối hoặc bắt nạt</span>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer">
+              <input
+                type="radio"
+                v-model="reportReason"
+                value="Ngôn từ thù địch"
+                class="w-4 h-4 text-blue-600"
+              />
+              <span class="text-sm text-gray-700">Ngôn từ thù địch</span>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer">
+              <input
+                type="radio"
+                v-model="reportReason"
+                value="Khác"
+                class="w-4 h-4 text-blue-600"
+              />
+              <span class="text-sm text-gray-700">Khác</span>
+            </label>
+          </div>
+          
+          <div class="flex items-center gap-3">
+            <button
+              @click="handleCancelReport"
+              :disabled="reporting"
+              class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors disabled:opacity-50"
+            >
+              Hủy
+            </button>
+            <button
+              @click="handleSubmitReport"
+              :disabled="reporting || !reportReason"
+              class="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {{ reporting ? 'Đang gửi...' : 'Gửi báo cáo' }}
+            </button>
+          </div>
+        </div>
       </div>
     </Transition>
   </div>
@@ -310,6 +374,9 @@ const showMenu = ref(false)
 const isEditing = ref(false)
 const editingContent = ref('')
 const saving = ref(false)
+const showReportModal = ref(false)
+const reportReason = ref('')
+const reporting = ref(false)
 
 const isOwnComment = computed(() => {
   return props.comment.userId === authStore.user?.uid
@@ -476,7 +543,11 @@ const handleSaveEdit = async () => {
 
 const handleDelete = async () => {
   showMenu.value = false
-  if (!confirm('Bạn có chắc muốn xóa bình luận này?')) {
+  const deleteMessage = isPostOwner && !isOwnComment 
+    ? 'Bạn có chắc muốn xóa bình luận này? (Bạn là chủ bài viết)'
+    : 'Bạn có chắc muốn xóa bình luận này?'
+  
+  if (!confirm(deleteMessage)) {
     return
   }
   
@@ -500,33 +571,53 @@ const handleDelete = async () => {
   }
 }
 
-const handleHide = async () => {
+const handleReport = () => {
   showMenu.value = false
-  const hidden = !props.comment.hidden
-  const action = hidden ? 'ẩn' : 'hiện'
-  
-  if (!confirm(`Bạn có chắc muốn ${action} bình luận này?`)) {
+  showReportModal.value = true
+  reportReason.value = ''
+}
+
+const handleSubmitReport = async () => {
+  if (!reportReason.value.trim()) {
+    if (window.showToast) {
+      window.showToast('Vui lòng chọn lý do báo cáo', 'error', '', 3000)
+    }
     return
   }
   
+  reporting.value = true
   try {
-    const result = await postsStore.hideComment(props.postId, props.comment.id, hidden)
+    const result = await postsStore.reportComment(
+      props.postId,
+      props.comment.id,
+      reportReason.value,
+      authStore.user.uid
+    )
     
     if (result.success) {
+      showReportModal.value = false
+      reportReason.value = ''
       if (window.showToast) {
-        window.showToast(`Đã ${action} bình luận`, 'success', '', 2000)
+        window.showToast('Đã gửi báo cáo thành công', 'success', '', 2000)
       }
     } else {
       if (window.showToast) {
-        window.showToast(`Không thể ${action} bình luận`, 'error', result.error || '', 3000)
+        window.showToast('Không thể gửi báo cáo', 'error', result.error || '', 3000)
       }
     }
   } catch (error) {
-    console.error('Error hiding comment:', error)
+    console.error('Error reporting comment:', error)
     if (window.showToast) {
-      window.showToast(`Không thể ${action} bình luận`, 'error', error.message || '', 3000)
+      window.showToast('Không thể gửi báo cáo', 'error', error.message || '', 3000)
     }
+  } finally {
+    reporting.value = false
   }
+}
+
+const handleCancelReport = () => {
+  showReportModal.value = false
+  reportReason.value = ''
 }
 
 const scrollToComment = (commentId) => {

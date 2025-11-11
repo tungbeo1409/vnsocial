@@ -30,7 +30,7 @@
       
       <!-- Right Side: Icons -->
       <div class="flex items-center gap-2 flex-shrink-0">
-        <div class="relative">
+        <div v-if="showMessageButton" class="relative">
           <button
             @click.stop="toggleChatPopup"
             class="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-700 relative"
@@ -56,7 +56,7 @@
             </div>
           </Transition>
         </div>
-        <NotificationBell />
+        <NotificationBell ref="notificationBellRef" />
         <router-link
           :to="`/profile/${authStore.user?.uid}`"
           class="flex items-center gap-2 px-2 py-1.5 rounded-full hover:bg-gray-100 transition-colors group"
@@ -80,8 +80,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useMessagesStore } from '@/stores/messages'
 import NotificationBell from '@/components/NotificationBell.vue'
@@ -90,16 +90,27 @@ import Icon from '@/components/Icon.vue'
 import { chatBus } from '@/utils/chatBus'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const messagesStore = useMessagesStore()
+
+// Hide message button when on messages page
+const showMessageButton = computed(() => {
+  return !route.path.startsWith('/messages') && !route.path.startsWith('/chat/')
+})
 
 const searchQuery = ref('')
 const showSearchSuggestions = ref(false)
 const showChatPopup = ref(false)
 const unreadMessagesCount = ref(0)
+const notificationBellRef = ref(null)
 
 const toggleChatPopup = (event) => {
   event?.stopPropagation()
+  // Close notification popup if open
+  if (notificationBellRef.value) {
+    notificationBellRef.value.closeDropdown()
+  }
   showChatPopup.value = !showChatPopup.value
 }
 
@@ -164,6 +175,13 @@ const handleClickOutside = (event) => {
     }
   }
 }
+
+// Close chat popup when route changes to messages page
+watch(() => route.path, (newPath) => {
+  if (newPath.startsWith('/messages') || newPath.startsWith('/chat/')) {
+    showChatPopup.value = false
+  }
+}, { immediate: true })
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)

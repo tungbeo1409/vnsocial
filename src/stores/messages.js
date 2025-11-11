@@ -5,6 +5,7 @@ import {
   query, 
   where, 
   orderBy, 
+  limit,
   onSnapshot, 
   addDoc,
   doc,
@@ -124,9 +125,11 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   // Subscribe to messages in a conversation
+  // Load messages ordered by creation time (ascending) - newest at bottom for easy reading
   const subscribeToMessages = (userId1, userId2) => {
     const conversationId = getConversationId(userId1, userId2)
     const messagesRef = collection(db, 'conversations', conversationId, 'messages')
+    // Query all messages, ordered by creation time ascending (oldest first, newest last)
     const q = query(messagesRef, orderBy('createdAt', 'asc'))
 
     return onSnapshot(q, async (snapshot) => {
@@ -356,19 +359,48 @@ export const useMessagesStore = defineStore('messages', () => {
           const messageRef = doc(db, 'conversations', conversationId, 'messages', docSnap.id)
           batch.update(messageRef, { read: true })
         })
-        await batch.commit()
         
-        // Immediately update unreadCount in conversations array (optimistic update)
-        const conv = conversations.value.find(c => c.id === conversationId)
-        if (conv) {
-          conv.unreadCount = 0
-          console.log(`[MessagesStore] Marked ${snapshot.size} messages as read for conversation ${conversationId}`)
+        try {
+          await batch.commit()
+          
+          // Immediately update unreadCount in conversations array (optimistic update)
+          const conv = conversations.value.find(c => c.id === conversationId)
+          if (conv) {
+            conv.unreadCount = 0
+            console.log(`[MessagesStore] Marked ${snapshot.size} messages as read for conversation ${conversationId}`)
+          }
+        } catch (updateError) {
+          // If update fails due to permissions, still update UI optimistically
+          console.warn('Could not update read status in Firestore (permissions issue):', updateError.message)
+          const conv = conversations.value.find(c => c.id === conversationId)
+          if (conv) {
+            conv.unreadCount = 0
+          }
+          // Mark messages as read locally in the messages array
+          messages.value.forEach(msg => {
+            if (msg.toUserId === userId1 && !msg.read) {
+              msg.read = true
+            }
+          })
         }
       }
       
       return { success: true }
     } catch (error) {
-      console.error('Error marking as read:', error)
+      // Silently handle errors - don't break the chat experience
+      console.warn('Error marking as read:', error.message)
+      // Still update UI optimistically
+      const conversationId = getConversationId(userId1, userId2)
+      const conv = conversations.value.find(c => c.id === conversationId)
+      if (conv) {
+        conv.unreadCount = 0
+      }
+      // Mark messages as read locally
+      messages.value.forEach(msg => {
+        if (msg.toUserId === userId1 && !msg.read) {
+          msg.read = true
+        }
+      })
       return { success: false, error: error.message }
     }
   }
@@ -461,22 +493,30 @@ export const useMessagesStore = defineStore('messages', () => {
           // Update total unread count
           updateTotalUnread()
           
-          // Check for new messages
-          messagesSnapshot.docChanges().forEach((change) => {
-            if (change.type === 'added') {
-              const message = change.doc.data()
-              const messageFromUserId = message.fromUserId
-              
-              // Only trigger if message is from the other user in this conversation
-              if (messageFromUserId === otherUserId) {
-                // New unread message arrived - tự động mở popup
-                console.log(`[MessagesStore] New unread message from ${otherUserId}, auto-opening chat`)
-                if (onNewMessage) {
-                  onNewMessage(otherUserId, message)
+          // Check for new messages (only on 'added' events, not on initial load)
+          // Skip initial snapshot to avoid auto-opening chats for old unread messages
+          if (messagesSnapshot.metadata.hasPendingWrites === false) {
+            messagesSnapshot.docChanges().forEach((change) => {
+              if (change.type === 'added') {
+                const message = change.doc.data()
+                const messageFromUserId = message.fromUserId
+                
+                // Only trigger if:
+                // 1. Message is from the other user in this conversation
+                // 2. Message is actually unread (read === false)
+                // 3. Message is for current user (toUserId === userId)
+                if (messageFromUserId === otherUserId && 
+                    message.read === false && 
+                    message.toUserId === userId) {
+                  // New unread message arrived - tự động mở popup
+                  console.log(`[MessagesStore] New unread message from ${otherUserId}, auto-opening chat`)
+                  if (onNewMessage) {
+                    onNewMessage(otherUserId, message)
+                  }
                 }
               }
-            }
-          })
+            })
+          }
         }, (error) => {
           console.error(`Error subscribing to messages in conversation ${conversationId}:`, error)
           // Remove this conversation from counts if error

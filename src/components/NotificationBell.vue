@@ -216,6 +216,11 @@ const closeDropdown = () => {
   showDropdown.value = false
 }
 
+// Expose closeDropdown method for parent components
+defineExpose({
+  closeDropdown
+})
+
 const handleNotificationClick = async (notification) => {
   // Mark as read
   if (!notification.read) {
@@ -274,7 +279,16 @@ const formatTime = (date) => {
 // Click outside handler
 const handleClickOutside = (event) => {
   const dropdown = document.querySelector('.notification-dropdown')
-  const button = event.target.closest('button')
+  const button = event.target.closest('button[title="Thông báo"]')
+  // Also close if clicking on chat button
+  const chatButton = event.target.closest('button[title="Tin nhắn"]')
+  const chatPopup = event.target.closest('.chat-popup-container')
+  
+  if (dropdown && !dropdown.contains(event.target) && !button && (chatButton || chatPopup)) {
+    closeDropdown()
+    return
+  }
+  
   if (dropdown && !dropdown.contains(event.target) && !button?.closest('.relative')) {
     closeDropdown()
   }

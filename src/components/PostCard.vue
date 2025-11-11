@@ -367,6 +367,7 @@ const isLiked = computed(() => {
   return props.post.likes?.includes(authStore.user?.uid) || false
 })
 
+
 const displayedImages = computed(() => {
   if (!props.post.images || !Array.isArray(props.post.images)) return []
   // Chỉ hiển thị tối đa 6 hình (2 dòng x 3 cột)

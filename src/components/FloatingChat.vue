@@ -52,58 +52,78 @@
           <p class="text-xs text-gray-500">Chưa có tin nhắn nào</p>
         </div>
 
-        <TransitionGroup v-else name="list" tag="div" class="space-y-2">
+        <TransitionGroup v-else name="list" tag="div">
           <ChatMessage
-            v-for="message in messagesStore.messages"
+            v-for="(message, index) in messagesStore.messages"
             :key="message.id"
             :message="message"
-            :is-own-message="message.fromUserId === authStore.user?.uid"
+            :previous-message="index > 0 ? messagesStore.messages[index - 1] : null"
+            :next-message="index < messagesStore.messages.length - 1 ? messagesStore.messages[index + 1] : null"
           />
         </TransitionGroup>
       </div>
 
       <!-- File Preview -->
       <Transition name="slide-down">
-        <div v-if="selectedFile" class="p-2 bg-white border-t border-gray-100">
-          <div class="bg-gray-50 rounded-lg p-2 flex items-center gap-2">
-            <!-- Image Preview -->
-            <div v-if="selectedFile.type === 'image' && selectedFile.preview" class="flex-shrink-0">
-              <img :src="selectedFile.preview" alt="Preview" class="w-12 h-12 rounded object-cover" />
-            </div>
-            
-            <!-- Video Preview -->
-            <div v-else-if="selectedFile.type === 'video' && selectedFile.preview" class="flex-shrink-0">
-              <video :src="selectedFile.preview" class="w-12 h-12 rounded object-cover" muted></video>
-            </div>
-            
-            <!-- Audio Preview -->
-            <div v-else-if="selectedFile.type === 'audio'" class="flex-shrink-0">
-              <div class="w-12 h-12 rounded bg-gray-200 flex items-center justify-center">
-                <span class="text-lg">🎵</span>
-              </div>
-            </div>
-            
-            <!-- File Preview -->
-            <div v-else-if="selectedFile.type === 'file'" class="flex-shrink-0">
-              <div class="w-12 h-12 rounded bg-gray-200 flex items-center justify-center">
-                <span class="text-lg">{{ getFileIcon(selectedFile.filename, selectedFile.type) }}</span>
-              </div>
-            </div>
-            
-            <!-- File Info -->
-            <div class="flex-1 min-w-0">
-              <p class="text-xs font-medium text-gray-900 truncate">{{ selectedFile.filename }}</p>
-              <p v-if="selectedFile.size" class="text-[10px] text-gray-500">{{ formatFileSize(selectedFile.size) }}</p>
-            </div>
-            
-            <!-- Remove Button -->
-            <button
-              @click="clearSelectedFile"
-              class="p-1 rounded hover:bg-gray-200 transition-colors text-gray-600"
-              title="Xóa"
+        <div v-if="selectedFiles.length > 0 && !showVoiceRecorder" class="p-2 bg-white border-t border-gray-100">
+          <div class="flex flex-wrap gap-2">
+            <!-- Multiple Files -->
+            <div 
+              v-for="(file, index) in selectedFiles" 
+              :key="index"
+              class="relative group"
             >
-              <Icon name="close" :size="14" />
-            </button>
+              <div v-if="file.type === 'image' && file.preview" class="relative">
+                <img :src="file.preview" alt="Preview" class="w-10 h-10 rounded object-cover border border-gray-200" />
+                <button
+                  @click="removeFile(index)"
+                  class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm"
+                  title="Xóa"
+                >
+                  <Icon name="close" :size="8" />
+                </button>
+              </div>
+              
+              <!-- Video Preview -->
+              <div v-else-if="file.type === 'video' && file.preview" class="relative">
+                <video :src="file.preview" class="w-10 h-10 rounded object-cover border border-gray-200" muted></video>
+                <button
+                  @click="removeFile(index)"
+                  class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm"
+                  title="Xóa"
+                >
+                  <Icon name="close" :size="8" />
+                </button>
+              </div>
+              
+              <!-- Audio Preview -->
+              <div v-else-if="file.type === 'audio'" class="relative">
+                <div class="w-10 h-10 rounded bg-gray-200 flex items-center justify-center border border-gray-200">
+                  <Icon name="microphone" :size="14" class="text-gray-600" />
+                </div>
+                <button
+                  @click="removeFile(index)"
+                  class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm"
+                  title="Xóa"
+                >
+                  <Icon name="close" :size="8" />
+                </button>
+              </div>
+              
+              <!-- File Preview -->
+              <div v-else-if="file.type === 'file'" class="relative">
+                <div class="w-10 h-10 rounded bg-gray-200 flex items-center justify-center border border-gray-200">
+                  <Icon name="attachment" :size="14" class="text-gray-600" />
+                </div>
+                <button
+                  @click="removeFile(index)"
+                  class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm"
+                  title="Xóa"
+                >
+                  <Icon name="close" :size="8" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </Transition>
@@ -123,6 +143,7 @@
             <input
               type="file"
               accept="image/*"
+              multiple
               @change="handleFileSelect($event, 'image')"
               class="hidden"
             />
@@ -166,7 +187,7 @@
           />
           <button
             type="submit"
-            :disabled="(!messageContent.trim() && !selectedFile) || messagesStore.loading || uploading"
+            :disabled="(!messageContent.trim() && selectedFiles.length === 0) || messagesStore.loading || uploading"
             class="px-3 py-2 bg-black text-white rounded-full font-semibold text-sm hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
             <Icon v-if="!messagesStore.loading && !uploading" name="send" :size="14" />
@@ -211,7 +232,7 @@ const friendsStore = useFriendsStore()
 
 const otherUser = ref(null)
 const messageContent = ref('')
-const selectedFile = ref(null)
+const selectedFiles = ref([]) // Array to hold multiple files
 const showVoiceRecorder = ref(false)
 const uploading = ref(false)
 const messagesContainer = ref(null)
@@ -243,39 +264,66 @@ const handleScroll = () => {
 }
 
 const handleFileSelect = async (event, fileType) => {
-  const file = event.target.files[0]
-  if (!file) return
+  const files = Array.from(event.target.files)
+  if (!files || files.length === 0) return
 
   try {
     uploading.value = true
-    let base64Data = null
-    let preview = null
-
+    
+    // Only allow multiple images
     if (fileType === 'image') {
-      base64Data = await compressImage(file)
-      preview = base64Data
-    } else if (fileType === 'video') {
-      base64Data = await compressVideo(file)
-      preview = base64Data
+      for (const file of files) {
+        let base64Data = null
+        let preview = null
+
+        base64Data = await compressImage(file)
+        preview = base64Data
+
+        // Check size (Firestore limit ~1MB per field, base64 is ~33% larger)
+        if (base64Data.length > 750 * 1024) {
+          alert(`File "${file.name}" quá lớn sau khi nén. Vui lòng chọn file nhỏ hơn.`)
+          continue
+        }
+
+        selectedFiles.value.push({
+          type: fileType,
+          data: base64Data,
+          filename: file.name,
+          size: file.size,
+          mimeType: file.type,
+          preview: preview
+        })
+      }
     } else {
-      base64Data = await fileToBase64(file)
-      preview = null
-    }
+      // For video, audio, file - only allow single file
+      const file = files[0]
+      let base64Data = null
+      let preview = null
 
-    // Check size (Firestore limit ~1MB per field, base64 is ~33% larger)
-    if (base64Data.length > 750 * 1024) {
-      alert('File quá lớn sau khi nén. Vui lòng chọn file nhỏ hơn.')
-      event.target.value = ''
-      return
-    }
+      if (fileType === 'video') {
+        base64Data = await compressVideo(file)
+        preview = base64Data
+      } else {
+        base64Data = await fileToBase64(file)
+        preview = null
+      }
 
-    selectedFile.value = {
-      type: fileType,
-      data: base64Data,
-      filename: file.name,
-      size: file.size,
-      mimeType: file.type,
-      preview: preview
+      // Check size
+      if (base64Data.length > 750 * 1024) {
+        alert('File quá lớn sau khi nén. Vui lòng chọn file nhỏ hơn.')
+        event.target.value = ''
+        return
+      }
+
+      // Clear other files and add this one
+      selectedFiles.value = [{
+        type: fileType,
+        data: base64Data,
+        filename: file.name,
+        size: file.size,
+        mimeType: file.type,
+        preview: preview
+      }]
     }
 
     // Clear file input
@@ -289,40 +337,68 @@ const handleFileSelect = async (event, fileType) => {
   }
 }
 
-const clearSelectedFile = () => {
-  selectedFile.value = null
+const removeFile = (index) => {
+  selectedFiles.value.splice(index, 1)
 }
 
 const handleSendVoice = (voiceData) => {
-  selectedFile.value = voiceData
+  // Clear other files and add voice recording
+  selectedFiles.value = [voiceData]
   showVoiceRecorder.value = false
 }
 
 const handleSendMessage = async () => {
-  if ((!messageContent.value.trim() && !selectedFile.value) || !props.otherUserId) return
+  if ((!messageContent.value.trim() && selectedFiles.value.length === 0) || !props.otherUserId) return
 
   const content = messageContent.value
-  const fileData = selectedFile.value
+  const filesToSend = [...selectedFiles.value]
 
   // Clear inputs
   messageContent.value = ''
-  selectedFile.value = null
+  const previousFiles = [...selectedFiles.value]
+  selectedFiles.value = []
   showVoiceRecorder.value = false
 
-  const result = await messagesStore.sendMessage(
-    authStore.user.uid,
-    props.otherUserId,
-    content,
-    fileData
-  )
+  try {
+    // If multiple images, send each as a separate message
+    if (filesToSend.length > 1 && filesToSend.every(f => f.type === 'image')) {
+      // Send all images
+      for (let i = 0; i < filesToSend.length; i++) {
+        const fileData = filesToSend[i]
+        const messageText = i === 0 ? content : '' // Only include text with first image
+        
+        const result = await messagesStore.sendMessage(
+          authStore.user.uid,
+          props.otherUserId,
+          messageText,
+          fileData
+        )
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Gửi tin nhắn thất bại')
+        }
+      }
+    } else {
+      // Single file or non-image file
+      const fileData = filesToSend[0] || null
+      const result = await messagesStore.sendMessage(
+        authStore.user.uid,
+        props.otherUserId,
+        content,
+        fileData
+      )
 
-  if (result.success) {
+      if (!result.success) {
+        throw new Error(result.error || 'Gửi tin nhắn thất bại')
+      }
+    }
+    
     scrollToBottom()
-  } else {
+  } catch (error) {
     // Restore on error
     messageContent.value = content
-    selectedFile.value = fileData
-    alert(result.error || 'Gửi tin nhắn thất bại')
+    selectedFiles.value = previousFiles
+    alert(error.message || 'Gửi tin nhắn thất bại')
   }
 }
 
@@ -366,7 +442,12 @@ onMounted(async () => {
   }
 })
 
-onUnmounted(() => {
+onUnmounted(async () => {
+  // Mark as read when closing chat (if not already marked)
+  if (authStore.user && props.otherUserId && !hasMarkedAsRead.value) {
+    await messagesStore.markAsRead(authStore.user.uid, props.otherUserId)
+  }
+  
   if (messagesUnsubscribe) {
     messagesUnsubscribe()
   }

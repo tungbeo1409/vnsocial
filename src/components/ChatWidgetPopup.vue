@@ -3,13 +3,38 @@
     <!-- Header -->
     <div class="bg-white border-b border-gray-100 p-3 flex items-center justify-between flex-shrink-0">
       <h3 class="font-semibold text-gray-900 text-base">Tin nhắn</h3>
-      <button
-        @click="$emit('close')"
-        class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-900"
-        title="Đóng"
-      >
-        <Icon name="close" :size="18" />
-      </button>
+      <div class="relative">
+        <button
+          @click.stop="showMenu = !showMenu"
+          class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-900"
+          title="Tùy chọn"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="1"></circle>
+            <circle cx="12" cy="5" r="1"></circle>
+            <circle cx="12" cy="19" r="1"></circle>
+          </svg>
+        </button>
+        
+        <!-- Menu Dropdown -->
+        <Transition name="slide-down">
+          <div
+            v-if="showMenu"
+            ref="menuDropdownRef"
+            @click.stop
+            class="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
+          >
+            <button
+              @click="handleOpenInWebChat"
+              class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+            >
+              <Icon name="message" :size="16" class="text-gray-500" />
+              <span>Mở trong web chat</span>
+            </button>
+            <!-- More options can be added here in the future -->
+          </div>
+        </Transition>
+      </div>
     </div>
 
     <!-- Conversations List -->
@@ -70,15 +95,20 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useMessagesStore } from '@/stores/messages'
 import Icon from '@/components/Icon.vue'
+
 const emit = defineEmits(['close', 'openChat'])
 
+const router = useRouter()
 const authStore = useAuthStore()
 const messagesStore = useMessagesStore()
 
+const showMenu = ref(false)
+const menuDropdownRef = ref(null)
 let conversationsUnsubscribe = null
 
 const openChat = async (userId) => {
@@ -93,10 +123,37 @@ const openChat = async (userId) => {
   emit('close') // Close popup when opening chat
 }
 
+const handleOpenInWebChat = () => {
+  showMenu.value = false
+  emit('close')
+  router.push('/messages')
+}
+
+// Close menu when clicking outside
+const handleClickOutside = (event) => {
+  if (showMenu.value) {
+    // Check if click is inside the menu dropdown or button
+    const menuButton = event.target.closest('button[title="Tùy chọn"]')
+    const menuDropdown = menuDropdownRef.value?.contains(event.target)
+    
+    // Close if clicking outside both the menu and button
+    if (!menuDropdown && !menuButton) {
+      showMenu.value = false
+    }
+  }
+}
+
 onMounted(() => {
   if (authStore.user) {
     conversationsUnsubscribe = messagesStore.subscribeToConversations(authStore.user.uid)
   }
+  
+  // Add click outside listener
+  document.addEventListener('click', handleClickOutside)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {

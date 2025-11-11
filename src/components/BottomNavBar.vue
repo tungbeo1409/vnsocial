@@ -31,18 +31,6 @@
         </span>
       </router-link>
       
-      <router-link 
-        to="/messages" 
-        class="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors text-gray-700 relative"
-        :class="{ 'text-system-blue': route.path === '/messages' || route.path.startsWith('/chat/') }"
-      >
-        <Icon name="message" :size="22" />
-        <span class="text-[10px] font-medium">Tin nhắn</span>
-        <span v-if="unreadMessagesCount > 0" class="absolute top-0.5 right-1.5 w-3.5 h-3.5 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-semibold">
-          {{ unreadMessagesCount > 9 ? '9+' : unreadMessagesCount }}
-        </span>
-      </router-link>
-      
       <router-link
         :to="`/profile/${authStore.user?.uid}`"
         class="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
@@ -69,20 +57,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useFriendsStore } from '@/stores/friends'
-import { useMessagesStore } from '@/stores/messages'
 import Icon from '@/components/Icon.vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
 const friendsStore = useFriendsStore()
-const messagesStore = useMessagesStore()
 
 const friendRequestsCount = ref(0)
-const unreadMessagesCount = ref(0)
 
 const loadFriendRequestsCount = async () => {
   if (!authStore.user) return
@@ -95,29 +80,14 @@ const loadFriendRequestsCount = async () => {
   }
 }
 
-let conversationsUnsubscribe = null
-
 onMounted(() => {
   if (authStore.user) {
     loadFriendRequestsCount()
-    
-    conversationsUnsubscribe = messagesStore.subscribeToConversations(authStore.user.uid)
-    
-    // Watch for unreadMessagesCount changes from store
-    watch(() => messagesStore.unreadMessagesCount, (newCount) => {
-      unreadMessagesCount.value = newCount
-    }, { immediate: true })
     
     // Watch for friend requests changes
     watch(() => friendsStore.friendRequests, () => {
       friendRequestsCount.value = friendsStore.friendRequests.length
     }, { deep: true })
-  }
-})
-
-onUnmounted(() => {
-  if (conversationsUnsubscribe) {
-    conversationsUnsubscribe()
   }
 })
 </script>

@@ -720,9 +720,24 @@ export const usePostsStore = defineStore('posts', () => {
     }
   }
 
-  // Hide comment (set hidden flag, owner and post owner can still see)
-  const hideComment = async (postId, commentId, hidden = true) => {
+  // Report comment
+  const reportComment = async (postId, commentId, reason, reportedBy) => {
     try {
+      // Check if user already reported this comment
+      const reportsRef = collection(db, 'reports')
+      const existingReportQuery = query(
+        reportsRef,
+        where('postId', '==', postId),
+        where('commentId', '==', commentId),
+        where('reportedBy', '==', reportedBy)
+      )
+      const existingReports = await getDocs(existingReportQuery)
+      
+      if (!existingReports.empty) {
+        return { success: false, error: 'Bạn đã báo cáo bình luận này rồi' }
+      }
+      
+      // Get comment info
       const postRef = doc(db, 'posts', postId)
       const postDoc = await getDoc(postRef)
       const post = postDoc.exists() ? postDoc.data() : null
@@ -730,28 +745,43 @@ export const usePostsStore = defineStore('posts', () => {
       if (!post || !post.comments) {
         return { success: false, error: 'Post or comments not found' }
       }
-
-      // Deep clone comments array
-      const comments = JSON.parse(JSON.stringify(post.comments))
       
-      // Find and update comment
-      const found = findAndUpdateComment(comments, commentId, (comment) => {
-        comment.hidden = hidden
-        if (hidden) {
-          comment.hiddenAt = new Date().toISOString()
-        } else {
-          comment.hiddenAt = null
+      // Find comment
+      let comment = null
+      const findComment = (commentList, targetId) => {
+        for (const c of commentList) {
+          if (c.id === targetId) {
+            return c
+          }
+          if (c.replies && Array.isArray(c.replies)) {
+            const found = findComment(c.replies, targetId)
+            if (found) return found
+          }
         }
-      })
-      
-      if (found) {
-        await updateDoc(postRef, { comments })
-        return { success: true }
+        return null
       }
       
-      return { success: false, error: 'Comment not found' }
+      comment = findComment(post.comments, commentId)
+      if (!comment) {
+        return { success: false, error: 'Comment not found' }
+      }
+      
+      // Create report
+      await addDoc(collection(db, 'reports'), {
+        type: 'comment',
+        postId,
+        commentId,
+        commentUserId: comment.userId,
+        commentContent: comment.content || '',
+        reportedBy,
+        reason: reason || 'Khác',
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      })
+      
+      return { success: true }
     } catch (error) {
-      console.error('Error hiding comment:', error)
+      console.error('Error reporting comment:', error)
       return { success: false, error: error.message }
     }
   }
@@ -768,7 +798,7 @@ export const usePostsStore = defineStore('posts', () => {
     deletePost,
     editComment,
     deleteComment,
-    hideComment
+    reportComment
   }
 })
 

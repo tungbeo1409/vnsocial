@@ -40,10 +40,11 @@
 
       <TransitionGroup v-else name="list" tag="div" class="space-y-2">
         <ChatMessage
-          v-for="message in messagesStore.messages"
+          v-for="(message, index) in messagesStore.messages"
           :key="message.id"
           :message="message"
-          :is-own-message="message.fromUserId === authStore.user?.uid"
+          :previous-message="index > 0 ? messagesStore.messages[index - 1] : null"
+          :next-message="index < messagesStore.messages.length - 1 ? messagesStore.messages[index + 1] : null"
         />
       </TransitionGroup>
     </div>
