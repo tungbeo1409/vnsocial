@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Kết bạn - Safe Runner</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+    .content {
+      padding: 30px;
+    }
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    button {
+      flex: 1;
+      min-width: 150px;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #2563eb;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    }
+    .btn-secondary {
+      background: #6b7280;
+      color: white;
+    }
+    .btn-secondary:hover {
+      background: #4b5563;
+    }
+    .btn-success {
+      background: #10b981;
+      color: white;
+    }
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+    .log-container {
+      background: #1e1e1e;
+      border-radius: 8px;
+      padding: 20px;
+      max-height: 500px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .log-item {
+      margin-bottom: 8px;
+      padding: 4px 0;
+    }
+    .log-success { color: #4ade80; }
+    .log-error { color: #f87171; }
+    .log-info { color: #60a5fa; }
+    .log-warning { color: #fbbf24; }
+    .log-step { 
+      color: #a78bfa; 
+      font-weight: bold;
+      margin-top: 12px;
+    }
+    .status {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-weight: 600;
+    }
+    .status.pending { background: #fef3c7; color: #92400e; }
+    .status.running { background: #dbeafe; color: #1e40af; }
+    .status.success { background: #d1fae5; color: #065f46; }
+    .status.error { background: #fee2e2; color: #991b1b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🧪 Test Chức năng Kết bạn</h1>
+      <p>An toàn - Không cần paste code vào Console</p>
+    </div>
+    
+    <div class="content">
+      <div id="status" class="status pending">
+        ⏳ Sẵn sàng - Click "Chạy Test" để bắt đầu
+      </div>
+      
+      <div class="button-group">
+        <button class="btn-primary" onclick="runFullTest()">
+          ▶️ Chạy Test Đầy Đủ
+        </button>
+        <button class="btn-secondary" onclick="clearLog()">
+          🗑️ Xóa Log
+        </button>
+        <button class="btn-success" onclick="checkRules()">
+          🔍 Kiểm tra Rules
+        </button>
+      </div>
+      
+      <div id="log" class="log-container"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    const logEl = document.getElementById('log')
+    const statusEl = document.getElementById('status')
+    
+    // Check if running from dev server
+    const isDevServer = window.location.protocol === 'http:' || window.location.protocol === 'https:'
+    const basePath = isDevServer ? window.location.origin : 'http://localhost:5173'
+    
+    function addLog(message, type = 'info') {
+      const div = document.createElement('div')
+      div.className = `log-item log-${type}`
+      div.textContent = message
+      logEl.appendChild(div)
+      logEl.scrollTop = logEl.scrollHeight
+    }
+    
+    function setStatus(text, type) {
+      statusEl.textContent = text
+      statusEl.className = `status ${type}`
+    }
+    
+    window.clearLog = () => {
+      logEl.innerHTML = ''
+      setStatus('⏳ Sẵn sàng - Click "Chạy Test" để bắt đầu', 'pending')
+    }
+    
+    window.checkRules = async () => {
+      clearLog()
+      setStatus('🔍 Đang kiểm tra Firestore Rules...', 'running')
+      addLog('📋 Kiểm tra Firestore Rules', 'step')
+      addLog('', 'info')
+      addLog('1. Vào Firebase Console: https://console.firebase.google.com/', 'info')
+      addLog('2. Chọn project: news-eff0b', 'info')
+      addLog('3. Vào Firestore Database > Rules', 'info')
+      addLog('4. Copy rules từ file: FIRESTORE_RULES_FIXED.txt', 'info')
+      addLog('5. Paste và Publish', 'info')
+      addLog('', 'info')
+      addLog('✅ Rules cần có:', 'success')
+      addLog('   - allow read: if true (cho users)', 'info')
+      addLog('   - allow update: if request.auth != null && (...)', 'info')
+      addLog('   - Cho phép update friendRequests, friends, sentRequests', 'info')
+      setStatus('✅ Hướng dẫn đã hiển thị', 'success')
+    }
+    
+    window.runFullTest = async () => {
+      clearLog()
+      setStatus('🔄 Đang chạy test...', 'running')
+      
+      // Check if running from file://
+      if (!isDevServer) {
+        addLog('⚠️  CẢNH BÁO: File đang chạy từ file://', 'warning')
+        addLog('', 'info')
+        addLog('📋 CÁCH SỬA:', 'step')
+        addLog('1. Đảm bảo dev server đang chạy: npm run dev', 'info')
+        addLog('2. Mở file này từ dev server:', 'info')
+        addLog(`   → ${basePath}/test-runner.html`, 'info')
+        addLog('', 'info')
+        addLog('HOẶC:', 'step')
+        addLog('Mở Console (F12) trong tab ứng dụng chính và chạy:', 'info')
+        addLog('', 'info')
+        addLog('const {useAuthStore}=await import("./src/stores/auth.js");', 'info')
+        addLog('const {useFriendsStore}=await import("./src/stores/friends.js");', 'info')
+        addLog('const {db}=await import("./src/config/firebase.js");', 'info')
+        addLog('const {doc,getDoc,collection,getDocs}=await import("firebase/firestore");', 'info')
+        addLog('const authStore=useAuthStore();', 'info')
+        addLog('const friendsStore=useFriendsStore();', 'info')
+        addLog('if(!authStore.user){console.error("Chưa đăng nhập!");}else{const snapshot=await getDocs(collection(db,"users"));const others=[];snapshot.forEach(d=>{if(d.id!==authStore.user.uid)others.push({id:d.id,...d.data()})});if(others.length>0){const result=await friendsStore.sendFriendRequest(authStore.user.uid,others[0].id);console.log("Kết quả:",result);}}', 'info')
+        setStatus('❌ Cần chạy từ dev server', 'error')
+        return
+      }
+      
+      try {
+        addLog('🧪 BẮT ĐẦU TEST CHỨC NĂNG KẾT BẠN', 'step')
+        addLog('='.repeat(50), 'info')
+        
+        // Step 1: Import
+        addLog('', 'info')
+        addLog('📦 Step 1: Import modules...', 'step')
+        const { useAuthStore } = await import('./src/stores/auth.js')
+        const { useFriendsStore } = await import('./src/stores/friends.js')
+        const { db } = await import('./src/config/firebase.js')
+        const { doc, getDoc, collection, getDocs } = await import('firebase/firestore')
+        
+        const authStore = useAuthStore()
+        const friendsStore = useFriendsStore()
+        addLog('✅ Modules imported', 'success')
+        
+        // Step 2: Check auth
+        addLog('', 'info')
+        addLog('🔐 Step 2: Kiểm tra authentication...', 'step')
+        if (!authStore.user) {
+          addLog('❌ CHƯA ĐĂNG NHẬP!', 'error')
+          addLog('   → Vui lòng đăng nhập vào ứng dụng trước', 'warning')
+          addLog('   → Sau đó quay lại và chạy test lại', 'warning')
+          setStatus('❌ Chưa đăng nhập', 'error')
+          return
+        }
+        addLog(`✅ User: ${authStore.user.email}`, 'success')
+        addLog(`✅ UID: ${authStore.user.uid}`, 'success')
+        
+        // Step 3: Test read
+        addLog('', 'info')
+        addLog('📖 Step 3: Test quyền đọc user profile...', 'step')
+        try {
+          const userDoc = await getDoc(doc(db, 'users', authStore.user.uid))
+          if (!userDoc.exists()) {
+            addLog('❌ User profile không tồn tại!', 'error')
+            setStatus('❌ Profile không tồn tại', 'error')
+            return
+          }
+          const userData = userDoc.data()
+          addLog('✅ Đọc được profile', 'success')
+          addLog(`   - Display Name: ${userData.displayName || 'N/A'}`, 'info')
+          addLog(`   - Friends: ${userData.friends?.length || 0}`, 'info')
+          addLog(`   - Friend Requests: ${userData.friendRequests?.length || 0}`, 'info')
+          addLog(`   - Sent Requests: ${userData.sentRequests?.length || 0}`, 'info')
+        } catch (error) {
+          addLog(`❌ Lỗi đọc profile: ${error.message}`, 'error')
+          addLog('   → Có thể do Firestore Rules chưa cho phép đọc', 'warning')
+          addLog('   → Click "Kiểm tra Rules" để xem hướng dẫn', 'warning')
+          setStatus('❌ Lỗi đọc profile', 'error')
+          return
+        }
+        
+        // Step 4: Find other user
+        addLog('', 'info')
+        addLog('🔍 Step 4: Tìm user khác để test...', 'step')
+        const usersRef = collection(db, 'users')
+        const snapshot = await getDocs(usersRef)
+        
+        const otherUsers = []
+        snapshot.forEach((doc) => {
+          if (doc.id !== authStore.user.uid) {
+            otherUsers.push({ id: doc.id, ...doc.data() })
+          }
+        })
+        
+        if (otherUsers.length === 0) {
+          addLog('❌ Không tìm thấy user nào khác!', 'error')
+          addLog('   → Tạo tài khoản khác để test', 'warning')
+          setStatus('❌ Không có user để test', 'error')
+          return
+        }
+        
+        const testUser = otherUsers[0]
+        addLog(`✅ Tìm thấy user: ${testUser.displayName}`, 'success')
+        addLog(`   - ID: ${testUser.id}`, 'info')
+        addLog(`   - Username: ${testUser.username || 'N/A'}`, 'info')
+        
+        // Step 5: Check status
+        addLog('', 'info')
+        addLog('🤝 Step 5: Kiểm tra friendship status...', 'step')
+        const status = await friendsStore.getFriendshipStatus(authStore.user.uid, testUser.id)
+        addLog(`✅ Status: ${status}`, 'success')
+        
+        // Step 6: Test send request
+        addLog('', 'info')
+        addLog('📤 Step 6: Test gửi lời mời kết bạn...', 'step')
+        
+        if (status === 'none') {
+          addLog('   → Đang gửi lời mời...', 'info')
+          const result = await friendsStore.sendFriendRequest(authStore.user.uid, testUser.id)
+          
+          if (result.success) {
+            addLog('✅ Gửi lời mời thành công!', 'success')
+            
+            // Wait for update
+            addLog('   → Đang đợi Firestore cập nhật...', 'info')
+            await new Promise(resolve => setTimeout(resolve, 1500))
+            
+            // Verify
+            addLog('', 'info')
+            addLog('🔍 Step 7: Verify dữ liệu...', 'step')
+            const senderDoc = await getDoc(doc(db, 'users', authStore.user.uid))
+            const senderData = senderDoc.data()
+            const receiverDoc = await getDoc(doc(db, 'users', testUser.id))
+            const receiverData = receiverDoc.data()
+            
+            addLog(`   Sender sentRequests: ${JSON.stringify(senderData.sentRequests || [])}`, 'info')
+            addLog(`   Receiver friendRequests: ${JSON.stringify(receiverData.friendRequests || [])}`, 'info')
+            
+            const senderHasRequest = senderData.sentRequests?.includes(testUser.id)
+            const receiverHasRequest = receiverData.friendRequests?.includes(authStore.user.uid)
+            
+            if (senderHasRequest && receiverHasRequest) {
+              addLog('✅ Dữ liệu đã được cập nhật đúng!', 'success')
+              addLog('', 'info')
+              addLog('🎉 TEST THÀNH CÔNG!', 'success')
+              setStatus('✅ Test thành công!', 'success')
+            } else {
+              addLog('❌ Dữ liệu chưa được cập nhật đúng!', 'error')
+              addLog('   → Có thể do Firestore Rules chưa cho phép update', 'warning')
+              addLog('   → Click "Kiểm tra Rules" để xem hướng dẫn', 'warning')
+              setStatus('❌ Dữ liệu chưa update', 'error')
+            }
+          } else {
+            addLog(`❌ Gửi lời mời thất bại: ${result.error}`, 'error')
+            addLog('   → Có thể do Firestore Rules chưa cho phép update', 'warning')
+            addLog('   → Click "Kiểm tra Rules" để xem hướng dẫn', 'warning')
+            setStatus('❌ Gửi lời mời thất bại', 'error')
+          }
+        } else if (status === 'sent') {
+          addLog('⚠️  Đã gửi lời mời rồi', 'warning')
+          addLog('   → Test hủy lời mời...', 'info')
+          const result = await friendsStore.cancelFriendRequest(authStore.user.uid, testUser.id)
+          if (result.success) {
+            addLog('✅ Hủy lời mời thành công!', 'success')
+            setStatus('✅ Test thành công!', 'success')
+          } else {
+            addLog(`❌ Hủy lời mời thất bại: ${result.error}`, 'error')
+            setStatus('❌ Hủy lời mời thất bại', 'error')
+          }
+        } else if (status === 'friends') {
+          addLog('⚠️  Đã là bạn bè rồi!', 'warning')
+          setStatus('✅ Đã là bạn bè', 'success')
+        } else if (status === 'received') {
+          addLog('⚠️  Đã nhận lời mời từ user này!', 'warning')
+          addLog('   → Test chấp nhận lời mời...', 'info')
+          const result = await friendsStore.acceptFriendRequest(authStore.user.uid, testUser.id)
+          if (result.success) {
+            addLog('✅ Chấp nhận lời mời thành công!', 'success')
+            setStatus('✅ Test thành công!', 'success')
+          } else {
+            addLog(`❌ Chấp nhận lời mời thất bại: ${result.error}`, 'error')
+            setStatus('❌ Chấp nhận thất bại', 'error')
+          }
+        }
+        
+      } catch (error) {
+        addLog('', 'info')
+        addLog(`❌ LỖI: ${error.message}`, 'error')
+        addLog(`   Stack: ${error.stack}`, 'error')
+        setStatus('❌ Có lỗi xảy ra', 'error')
+      }
+    }
+  </script>
+</body>
+</html>
+

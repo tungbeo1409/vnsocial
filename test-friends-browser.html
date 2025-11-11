@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Chức năng Kết bạn</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .test-container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #2563eb;
+    }
+    .log {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 400px;
+      overflow-y: auto;
+      margin-top: 20px;
+    }
+    .success { color: #4ade80; }
+    .error { color: #f87171; }
+    .info { color: #60a5fa; }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <h1>🧪 Test Chức năng Kết bạn</h1>
+    <p>Chạy test để kiểm tra chức năng kết bạn từ đầu đến cuối</p>
+    
+    <button onclick="runTest()">▶️ Chạy Test</button>
+    <button onclick="clearLog()">🗑️ Xóa Log</button>
+    
+    <div id="log" class="log"></div>
+  </div>
+
+  <script type="module">
+    const log = document.getElementById('log')
+    
+    function addLog(message, type = 'info') {
+      const div = document.createElement('div')
+      div.className = type
+      div.textContent = message
+      log.appendChild(div)
+      log.scrollTop = log.scrollHeight
+    }
+    
+    window.clearLog = () => {
+      log.innerHTML = ''
+    }
+    
+    window.runTest = async () => {
+      clearLog()
+      addLog('🧪 Bắt đầu test chức năng kết bạn...\n', 'info')
+      
+      try {
+        // Import stores
+        const { useAuthStore } = await import('./src/stores/auth.js')
+        const { useFriendsStore } = await import('./src/stores/friends.js')
+        const { db } = await import('./src/config/firebase.js')
+        const { doc, getDoc, collection, getDocs } = await import('firebase/firestore')
+        
+        const authStore = useAuthStore()
+        
+        // Test 1: Check authentication
+        addLog('📋 Test 1: Kiểm tra user đã đăng nhập', 'info')
+        if (!authStore.user) {
+          addLog('❌ Chưa đăng nhập! Vui lòng đăng nhập trước.', 'error')
+          addLog('   → Vào trang web và đăng nhập, sau đó quay lại test', 'info')
+          return
+        }
+        addLog(`✅ User đã đăng nhập: ${authStore.user.uid}`, 'success')
+        addLog(`✅ Email: ${authStore.user.email}`, 'success')
+        
+        // Test 2: Check read permission
+        addLog('\n📋 Test 2: Kiểm tra quyền đọc user profile', 'info')
+        try {
+          const userDoc = await getDoc(doc(db, 'users', authStore.user.uid))
+          if (userDoc.exists()) {
+            const userData = userDoc.data()
+            addLog('✅ Đọc được user profile', 'success')
+            addLog(`   - friends: ${(userData.friends || []).length}`, 'info')
+            addLog(`   - friendRequests: ${(userData.friendRequests || []).length}`, 'info')
+            addLog(`   - sentRequests: ${(userData.sentRequests || []).length}`, 'info')
+          } else {
+            addLog('❌ User profile không tồn tại!', 'error')
+            return
+          }
+        } catch (error) {
+          addLog(`❌ Lỗi đọc user profile: ${error.message}`, 'error')
+          addLog('   → Có thể do Firestore Rules chưa cho phép đọc', 'error')
+          addLog('   → Kiểm tra Rules trong Firebase Console', 'info')
+          return
+        }
+        
+        // Test 3: Find other user
+        addLog('\n📋 Test 3: Tìm user khác để test', 'info')
+        const usersRef = collection(db, 'users')
+        const snapshot = await getDocs(usersRef)
+        
+        const otherUsers = []
+        snapshot.forEach((doc) => {
+          if (doc.id !== authStore.user.uid) {
+            otherUsers.push({ id: doc.id, ...doc.data() })
+          }
+        })
+        
+        if (otherUsers.length === 0) {
+          addLog('❌ Không tìm thấy user nào khác để test!', 'error')
+          addLog('   → Tạo tài khoản khác để test', 'info')
+          return
+        }
+        
+        const testUser = otherUsers[0]
+        addLog(`✅ Tìm thấy user để test: ${testUser.displayName} (${testUser.id})`, 'success')
+        
+        // Test 4: Check friendship status
+        addLog('\n📋 Test 4: Kiểm tra friendship status', 'info')
+        const friendsStore = useFriendsStore()
+        const status = await friendsStore.getFriendshipStatus(authStore.user.uid, testUser.id)
+        addLog(`✅ Friendship status: ${status}`, 'success')
+        
+        // Test 5: Test send friend request
+        addLog('\n📋 Test 5: Test gửi lời mời kết bạn', 'info')
+        if (status === 'none') {
+          addLog('   → Đang gửi lời mời...', 'info')
+          const result = await friendsStore.sendFriendRequest(authStore.user.uid, testUser.id)
+          
+          if (result.success) {
+            addLog('✅ Gửi lời mời thành công!', 'success')
+            
+            // Verify data
+            await new Promise(resolve => setTimeout(resolve, 1000)) // Wait for update
+            
+            const userDoc = await getDoc(doc(db, 'users', authStore.user.uid))
+            const userData = userDoc.data()
+            const otherUserDoc = await getDoc(doc(db, 'users', testUser.id))
+            const otherUserData = otherUserDoc.data()
+            
+            addLog(`   - sentRequests: ${JSON.stringify(userData.sentRequests || [])}`, 'info')
+            addLog(`   - friendRequests của người nhận: ${JSON.stringify(otherUserData.friendRequests || [])}`, 'info')
+            
+            if (userData.sentRequests?.includes(testUser.id) && 
+                otherUserData.friendRequests?.includes(authStore.user.uid)) {
+              addLog('✅ Dữ liệu đã được cập nhật đúng!', 'success')
+            } else {
+              addLog('❌ Dữ liệu chưa được cập nhật đúng!', 'error')
+              addLog('   → Có thể do Firestore Rules chưa cho phép update', 'error')
+            }
+          } else {
+            addLog(`❌ Gửi lời mời thất bại: ${result.error}`, 'error')
+            addLog('   → Có thể do Firestore Rules chưa cho phép update', 'error')
+            addLog('   → Xem file FIRESTORE_RULES_FIXED.txt để cập nhật Rules', 'info')
+          }
+        } else if (status === 'sent') {
+          addLog('⚠️  Đã gửi lời mời rồi, đang hủy...', 'info')
+          const result = await friendsStore.cancelFriendRequest(authStore.user.uid, testUser.id)
+          if (result.success) {
+            addLog('✅ Hủy lời mời thành công!', 'success')
+          } else {
+            addLog(`❌ Hủy lời mời thất bại: ${result.error}`, 'error')
+          }
+        } else {
+          addLog(`⚠️  Status: ${status} - Không thể test gửi lời mời`, 'info')
+        }
+        
+        // Summary
+        addLog('\n✅ Test hoàn tất!', 'success')
+        addLog('\n📝 Tóm tắt:', 'info')
+        addLog('   1. ✅ User authentication', 'success')
+        addLog('   2. ✅ Read user profile', 'success')
+        addLog('   3. ⚠️  Send friend request - Cần kiểm tra Rules', 'info')
+        addLog('   4. ⚠️  Update arrays - Cần kiểm tra Rules', 'info')
+        addLog('\n💡 Nếu lỗi, kiểm tra Firestore Rules trong Firebase Console', 'info')
+        
+      } catch (error) {
+        addLog(`❌ Lỗi: ${error.message}`, 'error')
+        addLog(`   Stack: ${error.stack}`, 'error')
+      }
+    }
+  </script>
+</body>
+</html>
+

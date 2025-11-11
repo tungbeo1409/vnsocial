@@ -1,0 +1,273 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply antialiased;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-900;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  /* ========== PAGE LAYOUT ========== */
+  .page-container {
+    @apply min-h-screen bg-white;
+  }
+  
+  .page-header {
+    @apply sticky top-0 z-50 bg-white border-b border-gray-200;
+  }
+  
+  .page-header-content {
+    @apply max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4;
+  }
+  
+  .page-main {
+    @apply max-w-4xl mx-auto px-4 py-6;
+  }
+  
+  /* ========== BUTTONS ========== */
+  .btn-primary {
+    @apply bg-system-blue text-white px-5 py-2.5 rounded-xl 
+           font-semibold text-sm
+           hover:bg-blue-600 active:bg-blue-700
+           transition-all duration-200 ease-out
+           shadow-apple hover:shadow-apple-lg
+           transform hover:scale-[1.02] active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-100 text-gray-900 px-5 py-2.5 rounded-xl
+           font-semibold text-sm
+           hover:bg-gray-200 active:bg-gray-300
+           transition-all duration-200 ease-out
+           transform hover:scale-[1.02] active:scale-[0.98];
+  }
+  
+  .btn-ghost {
+    @apply bg-transparent text-gray-700 px-4 py-2 rounded-xl
+           font-medium text-sm
+           hover:bg-gray-100 active:bg-gray-200
+           transition-all duration-200 ease-out;
+  }
+  
+  /* ========== INPUTS ========== */
+  .input-field {
+    @apply w-full px-4 py-3 bg-white border border-gray-200 rounded-xl
+           focus:outline-none focus:ring-2 focus:ring-system-blue/20 focus:border-system-blue
+           transition-all duration-200 ease-out
+           placeholder:text-gray-400 text-sm;
+  }
+  
+  .input-search {
+    @apply w-full px-4 py-2.5 pl-10 bg-gray-100 rounded-full border-0
+           focus:outline-none focus:ring-2 focus:ring-system-blue focus:bg-white
+           transition-all duration-200 ease-out
+           text-sm text-gray-900 placeholder:text-gray-500;
+  }
+  
+  .input-search-lg {
+    @apply input-search pl-12 py-3;
+  }
+  
+  /* ========== CARDS ========== */
+  .card {
+    @apply bg-white rounded-2xl shadow-apple p-6
+           transition-all duration-300 ease-out;
+  }
+  
+  .card-hover {
+    @apply card hover:shadow-apple-lg;
+  }
+  
+  /* ========== LOADING STATES ========== */
+  .loading-spinner {
+    @apply inline-block w-8 h-8 border-2 border-system-blue border-t-transparent rounded-full animate-spin;
+  }
+  
+  .loading-container {
+    @apply text-center py-12;
+  }
+  
+  .loading-text {
+    @apply text-sm text-gray-500 mt-4;
+  }
+  
+  /* ========== EMPTY STATES ========== */
+  .empty-state {
+    @apply text-center py-16 animate-fade-in;
+  }
+  
+  .empty-state-icon {
+    @apply text-6xl mb-4;
+  }
+  
+  .empty-state-title {
+    @apply text-lg font-semibold text-gray-900 mb-2;
+  }
+  
+  .empty-state-description {
+    @apply text-sm text-gray-500 mb-6;
+  }
+  
+  /* ========== NAVIGATION ========== */
+  .nav-link {
+    @apply text-gray-600 hover:text-system-blue transition-colors duration-200
+           font-medium text-sm relative;
+  }
+  
+  .nav-link::after {
+    @apply absolute bottom-0 left-0 w-0 h-0.5 bg-system-blue
+           transition-all duration-200 ease-out;
+    content: '';
+  }
+  
+  .nav-link:hover::after {
+    @apply w-full;
+  }
+  
+  /* ========== AVATAR ========== */
+  .avatar {
+    @apply rounded-full object-cover
+           ring-2 ring-white shadow-sm
+           transition-all duration-200 ease-out;
+  }
+  
+  .avatar-hover {
+    @apply avatar hover:ring-system-blue/30;
+  }
+  
+  /* ========== BADGE ========== */
+  .badge {
+    @apply inline-flex items-center justify-center
+           px-2.5 py-1 rounded-full text-xs font-semibold
+           bg-system-red text-white
+           animate-scale-in;
+  }
+  
+  /* ========== TRANSITIONS ========== */
+  .transition-smooth {
+    @apply transition-all duration-300 ease-out;
+  }
+  
+  .transition-fast {
+    @apply transition-all duration-150 ease-out;
+  }
+  
+  /* ========== UTILITIES ========== */
+  .skeleton {
+    @apply bg-gray-200 rounded-xl animate-pulse;
+  }
+  
+  .page-title {
+    @apply text-xl font-bold bg-gradient-to-r from-system-blue to-system-purple bg-clip-text text-transparent;
+  }
+  
+  .section-title {
+    @apply text-lg font-semibold text-gray-900 mb-4;
+  }
+}
+
+@layer utilities {
+  /* Custom Scrollbar */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Smooth Scrolling */
+  .scroll-smooth {
+    scroll-behavior: smooth;
+  }
+  
+  /* Text Selection */
+  .select-none {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+  }
+}
+
+/* ========== TRANSITION ANIMATIONS ========== */
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.3s ease;
+}
+
+.list-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.list-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.list-move {
+  transition: transform 0.3s ease;
+}
+
+/* Modal transitions */
+.modal-enter-active,
+.modal-leave-active {
+  transition: all 0.3s ease;
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-from .bg-white,
+.modal-leave-to .bg-white {
+  transform: scale(0.95);
+}
+
+/* Chat window transitions */
+.chat-window-enter-active,
+.chat-window-leave-active {
+  transition: all 0.3s ease;
+}
+
+.chat-window-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+}
+
+.chat-window-leave-to {
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+}
+
+/* Slide down transition */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-down-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+

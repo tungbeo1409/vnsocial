@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection - Rules đơn giản cho development
+    match /users/{userId} {
+      // Cho phép đọc tất cả user profiles
+      allow read: if true;
+      
+      // Cho phép user tự tạo profile
+      allow create: if request.auth != null && request.auth.uid == userId;
+      
+      // Cho phép update:
+      // - User tự update profile của mình
+      // - User update friendRequests, friends, sentRequests (cho phép cả khi update profile của mình hoặc người khác)
+      allow update: if request.auth != null && (
+        // User tự update
+        request.auth.uid == userId ||
+        // Cho phép update friendRequests, friends, sentRequests (khi gửi/nhận/hủy lời mời)
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friendRequests', 'friends', 'sentRequests'])
+      );
+      
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Posts collection
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
+    }
+  }
+}
+

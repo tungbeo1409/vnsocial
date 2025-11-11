@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ========== USERS COLLECTION ==========
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && (
+        request.auth.uid == userId ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friendRequests', 'friends', 'sentRequests'])
+      );
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // ========== POSTS COLLECTION ==========
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
+    }
+    
+    // ========== CONVERSATIONS COLLECTION ==========
+    // Rules CỰC ĐƠN GIẢN cho development - chỉ check auth
+    match /conversations/{conversationId} {
+      // Cho phép đọc nếu đã đăng nhập
+      allow read: if request.auth != null;
+      
+      // Cho phép tạo nếu đã đăng nhập
+      allow create: if request.auth != null;
+      
+      // Cho phép update nếu đã đăng nhập
+      allow update: if request.auth != null;
+      
+      // Không cho phép xóa
+      allow delete: if false;
+      
+      // ========== MESSAGES SUBCOLLECTION ==========
+      match /messages/{messageId} {
+        // Cho phép đọc nếu đã đăng nhập
+        allow read: if request.auth != null;
+        
+        // Cho phép tạo nếu đã đăng nhập
+        allow create: if request.auth != null;
+        
+        // Không cho phép update/delete
+        allow update, delete: if false;
+      }
+    }
+  }
+}
+

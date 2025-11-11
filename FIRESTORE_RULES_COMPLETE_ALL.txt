@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ========== USERS COLLECTION ==========
+    match /users/{userId} {
+      // Cho phép đọc tất cả user profiles (để tìm kiếm)
+      allow read: if true;
+      
+      // Cho phép user tự tạo profile của mình
+      allow create: if request.auth != null && request.auth.uid == userId;
+      
+      // Cho phép update:
+      // - User tự update profile của mình
+      // - User update friendRequests, friends, sentRequests (khi gửi/nhận/hủy lời mời)
+      allow update: if request.auth != null && (
+        // User tự update
+        request.auth.uid == userId ||
+        // Cho phép update friendRequests, friends, sentRequests
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friendRequests', 'friends', 'sentRequests'])
+      );
+      
+      // Cho phép user tự xóa profile
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // ========== POSTS COLLECTION ==========
+    match /posts/{postId} {
+      // Cho phép đọc tất cả posts
+      allow read: if true;
+      // Chỉ user đã đăng nhập mới được tạo post
+      allow create: if request.auth != null;
+      // Chỉ user đã đăng nhập mới được update (like, comment)
+      allow update: if request.auth != null;
+      // Chỉ chủ post mới được xóa
+      allow delete: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
+    }
+    
+    // ========== CONVERSATIONS COLLECTION ==========
+    match /conversations/{conversationId} {
+      // Chỉ participants mới được đọc conversation
+      allow read: if request.auth != null && 
+        request.auth.uid in resource.data.participants;
+      
+      // Cho phép tạo conversation nếu user là participant
+      allow create: if request.auth != null && 
+        request.auth.uid in request.resource.data.participants;
+      
+      // Cho phép update conversation nếu user là participant
+      allow update: if request.auth != null && 
+        request.auth.uid in resource.data.participants;
+      
+      // Không cho phép xóa conversation
+      allow delete: if false;
+      
+      // ========== MESSAGES SUBCOLLECTION ==========
+      match /messages/{messageId} {
+        // Chỉ participants mới được đọc messages
+        allow read: if request.auth != null && 
+          request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        
+        // Chỉ người gửi mới được tạo message và phải là participant
+        allow create: if request.auth != null && 
+          request.auth.uid == request.resource.data.fromUserId &&
+          request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        
+        // Không cho phép update/delete messages
+        allow update, delete: if false;
+      }
+    }
+    
+    // ========== NOTIFICATIONS COLLECTION ==========
+    match /notifications/{notificationId} {
+      // Đọc: chỉ user nhận mới đọc được
+      allow read: if request.auth != null && request.auth.uid == resource.data.toUserId;
+      
+      // Tạo: user đã đăng nhập có thể tạo
+      allow create: if request.auth != null;
+      
+      // Update: chỉ user nhận mới update được (để mark as read)
+      allow update: if request.auth != null && request.auth.uid == resource.data.toUserId;
+      
+      // Không cho xóa
+      allow delete: if false;
+    }
+  }
+}
+
