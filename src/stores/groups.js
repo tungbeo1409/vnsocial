@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/config/firebase'
 import { useNotificationsStore } from './notifications'
+import { useUserCacheStore } from './userCache'
 
 export const useGroupsStore = defineStore('groups', () => {
   const groups = ref([])
@@ -30,9 +31,9 @@ export const useGroupsStore = defineStore('groups', () => {
 
     loading.value = true
     try {
-      // Get creator info
-      const creatorDoc = await getDoc(doc(db, 'users', creatorId))
-      const creatorData = creatorDoc.exists() ? creatorDoc.data() : {}
+      // Get creator info from cache
+      const userCacheStore = useUserCacheStore()
+      const creatorData = await userCacheStore.getUser(creatorId) || {}
 
       // Create group document
       const groupRef = doc(collection(db, 'groups'))
@@ -71,6 +72,9 @@ export const useGroupsStore = defineStore('groups', () => {
         })
       }
 
+      // Clear cache for creator
+      clearGroupsCache(creatorId)
+      
       return { success: true, groupId }
     } catch (error) {
       console.error('Error creating group:', error)
@@ -97,9 +101,9 @@ export const useGroupsStore = defineStore('groups', () => {
         return { success: false, error: 'Bạn không có lời mời tham gia nhóm này' }
       }
 
-      // Get user info for notification
-      const userDoc = await getDoc(doc(db, 'users', userId))
-      const userData = userDoc.exists() ? userDoc.data() : {}
+      // Get user info from cache
+      const userCacheStore = useUserCacheStore()
+      const userData = await userCacheStore.getUser(userId) || {}
 
       // Add user to members and remove from pendingInvites
       const groupRef = doc(db, 'groups', groupId)
@@ -135,6 +139,10 @@ export const useGroupsStore = defineStore('groups', () => {
         })
       }
 
+      // Clear cache for user and all other members
+      clearGroupsCache(userId)
+      otherMembers.forEach(memberId => clearGroupsCache(memberId))
+      
       return { success: true }
     } catch (error) {
       console.error('Error accepting group invite:', error)
@@ -190,16 +198,16 @@ export const useGroupsStore = defineStore('groups', () => {
       const userData = userDoc.data()
       const inviteIds = Array.isArray(userData.groupInvites) ? userData.groupInvites : []
 
-      // Get group details for each invite
+      // Get group details for each invite (batch load creators)
+      const userCacheStore = useUserCacheStore()
       const invites = await Promise.all(
         inviteIds.map(async (groupId) => {
           try {
             const groupDoc = await getDoc(doc(db, 'groups', groupId))
             if (groupDoc.exists()) {
               const groupData = groupDoc.data()
-              // Get creator info
-              const creatorDoc = await getDoc(doc(db, 'users', groupData.createdBy))
-              const creatorData = creatorDoc.exists() ? creatorDoc.data() : {}
+              // Get creator info from cache
+              const creatorData = await userCacheStore.getUser(groupData.createdBy) || {}
 
               return {
                 groupId: groupId,
@@ -225,8 +233,54 @@ export const useGroupsStore = defineStore('groups', () => {
     }
   }
 
-  // Load user's groups
-  const loadUserGroups = async (userId) => {
+  // Cache for user groups to avoid repeated queries
+  const GROUPS_CACHE_KEY = 'vn_social_groups_cache'
+  const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes cache
+  
+  // Load from localStorage
+  const loadGroupsFromStorage = (userId) => {
+    try {
+      const stored = localStorage.getItem(GROUPS_CACHE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        const cached = parsed[userId]
+        if (cached && (Date.now() - cached.timestamp < CACHE_DURATION)) {
+          return cached.groups
+        }
+      }
+    } catch (error) {
+      // Ignore
+    }
+    return null
+  }
+  
+  // Save to localStorage
+  const saveGroupsToStorage = (userId, groups) => {
+    try {
+      const stored = localStorage.getItem(GROUPS_CACHE_KEY)
+      const parsed = stored ? JSON.parse(stored) : {}
+      parsed[userId] = {
+        groups,
+        timestamp: Date.now()
+      }
+      localStorage.setItem(GROUPS_CACHE_KEY, JSON.stringify(parsed))
+    } catch (error) {
+      // Ignore quota errors
+    }
+  }
+
+  // Load user's groups (with caching)
+  const loadUserGroups = async (userId, forceRefresh = false) => {
+    if (!userId) return []
+    
+    // Check localStorage cache first
+    if (!forceRefresh) {
+      const cached = loadGroupsFromStorage(userId)
+      if (cached) {
+        return cached
+      }
+    }
+
     try {
       const groupsRef = collection(db, 'groups')
       const q = query(groupsRef, where('members', 'array-contains', userId))
@@ -240,10 +294,27 @@ export const useGroupsStore = defineStore('groups', () => {
         })
       })
 
+      // Save to localStorage
+      saveGroupsToStorage(userId, groupsList)
+
       return groupsList
     } catch (error) {
       console.error('Error loading user groups:', error)
       return []
+    }
+  }
+  
+  // Clear groups cache for a user (when group changes)
+  const clearGroupsCache = (userId) => {
+    try {
+      const stored = localStorage.getItem(GROUPS_CACHE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        delete parsed[userId]
+        localStorage.setItem(GROUPS_CACHE_KEY, JSON.stringify(parsed))
+      }
+    } catch (error) {
+      // Ignore
     }
   }
 
@@ -270,7 +341,8 @@ export const useGroupsStore = defineStore('groups', () => {
     rejectGroupInvite,
     loadGroupInvites,
     loadUserGroups,
-    getGroupById
+    getGroupById,
+    clearGroupsCache
   }
 })
 

@@ -51,6 +51,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/chat/group/:groupId',
+    name: 'GroupChat',
+    component: () => import('@/views/GroupChat.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/test-friends',
     name: 'TestFriends',
     component: () => import('@/views/TestFriends.vue'),

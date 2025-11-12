@@ -17,83 +17,140 @@ import {
 import { db } from '@/config/firebase'
 import { useNotificationsStore } from './notifications'
 import { useAuthStore } from './auth'
+import { useUserCacheStore } from './userCache'
 
 export const usePostsStore = defineStore('posts', () => {
   const posts = ref([])
   const loading = ref(false)
+  const POSTS_CACHE_KEY = 'vn_social_posts_cache'
+  const CACHE_DURATION = 2 * 60 * 1000 // 2 minutes cache
+  
+  // Load posts from cache
+  const loadPostsFromCache = () => {
+    try {
+      const stored = localStorage.getItem(POSTS_CACHE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed.posts && parsed.timestamp && (Date.now() - parsed.timestamp < CACHE_DURATION)) {
+          return parsed.posts
+        }
+      }
+    } catch (error) {
+      // Ignore
+    }
+    return null
+  }
+  
+  // Save posts to cache
+  const savePostsToCache = (postsData) => {
+    try {
+      localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify({
+        posts: postsData,
+        timestamp: Date.now()
+      }))
+    } catch (error) {
+      // Ignore quota errors
+    }
+  }
 
-  // Listen to posts in real-time
+  // Listen to posts in real-time (only when needed)
+  let postsUnsubscribe = null
+  let subscribersCount = 0
+  
   const subscribeToPosts = () => {
+    // If already subscribed, just increment counter
+    if (postsUnsubscribe) {
+      subscribersCount++
+      return () => {
+        subscribersCount--
+        // Only unsubscribe when no one is listening
+        if (subscribersCount === 0 && postsUnsubscribe) {
+          postsUnsubscribe()
+          postsUnsubscribe = null
+        }
+      }
+    }
+    
+    // Load from cache first for instant display
+    const cachedPosts = loadPostsFromCache()
+    if (cachedPosts && cachedPosts.length > 0) {
+      posts.value = cachedPosts
+    }
+    
+    subscribersCount = 1
     const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'))
     
-    return onSnapshot(q, async (snapshot) => {
+    postsUnsubscribe = onSnapshot(q, async (snapshot) => {
       const postsData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }))
       
-      // Always load latest user info from profile for all posts and comments
-      const postsWithLatestInfo = await Promise.all(
-        postsData.map(async (post) => {
-          // Update post author info
-          if (post.userId) {
-            try {
-              const userDoc = await getDoc(doc(db, 'users', post.userId))
-              if (userDoc.exists()) {
-                const userData = userDoc.data()
-                // Always update with latest info from user profile
-                post.userAvatar = userData.avatar || ''
-                post.userDisplayName = userData.displayName || post.userDisplayName || 'Người dùng'
+      // Use user cache to load user info efficiently
+      const userCacheStore = useUserCacheStore()
+      
+      // Collect all user IDs that need to be loaded
+      const userIds = new Set()
+      postsData.forEach(post => {
+        if (post.userId) userIds.add(post.userId)
+        if (post.comments && Array.isArray(post.comments)) {
+          const collectUserIds = (commentList) => {
+            commentList.forEach(comment => {
+              if (comment.userId) userIds.add(comment.userId)
+              if (comment.replyTo && comment.replyTo.userId) userIds.add(comment.replyTo.userId)
+              if (comment.replies && Array.isArray(comment.replies) && comment.replies.length > 0) {
+                collectUserIds(comment.replies)
               }
-            } catch (error) {
-              console.error('Error loading user info for post:', error)
+            })
+          }
+          collectUserIds(post.comments)
+        }
+      })
+      
+      // Batch load all users
+      await userCacheStore.getUsers([...userIds])
+      
+      // Attach user info from cache
+      const cache = userCacheStore.getUserCache()
+      const attachUserInfo = (commentList) => {
+        commentList.forEach(comment => {
+          if (comment.userId) {
+            const userData = cache.get(comment.userId)
+            if (userData) {
+              comment.userAvatar = userData.avatar || ''
+              comment.userDisplayName = userData.displayName || 'Người dùng'
             }
           }
-          
-          // Update all comments with latest user info
-          if (post.comments && Array.isArray(post.comments)) {
-            const updateCommentInfo = async (commentList) => {
-              for (const comment of commentList) {
-                if (comment.userId) {
-                  try {
-                    const userDoc = await getDoc(doc(db, 'users', comment.userId))
-                    if (userDoc.exists()) {
-                      const userData = userDoc.data()
-                      comment.userAvatar = userData.avatar || ''
-                      comment.userDisplayName = userData.displayName || comment.userDisplayName || 'Người dùng'
-                    }
-                  } catch (error) {
-                    console.error('Error loading user info for comment:', error)
-                  }
-                }
-                
-                // Update replyTo info if exists
-                if (comment.replyTo && comment.replyTo.userId) {
-                  try {
-                    const repliedUserDoc = await getDoc(doc(db, 'users', comment.replyTo.userId))
-                    if (repliedUserDoc.exists()) {
-                      const repliedUserData = repliedUserDoc.data()
-                      comment.replyTo.userAvatar = repliedUserData.avatar || ''
-                      comment.replyTo.userDisplayName = repliedUserData.displayName || comment.replyTo.userDisplayName || 'Người dùng'
-                    }
-                  } catch (error) {
-                    console.error('Error loading replied user info:', error)
-                  }
-                }
-                
-                // Recursively update replies
-                if (comment.replies && Array.isArray(comment.replies) && comment.replies.length > 0) {
-                  await updateCommentInfo(comment.replies)
-                }
-              }
+          if (comment.replyTo && comment.replyTo.userId) {
+            const repliedUserData = cache.get(comment.replyTo.userId)
+            if (repliedUserData) {
+              comment.replyTo.userAvatar = repliedUserData.avatar || ''
+              comment.replyTo.userDisplayName = repliedUserData.displayName || 'Người dùng'
             }
-            
-            await updateCommentInfo(post.comments)
           }
-          
-          return post
+          if (comment.replies && Array.isArray(comment.replies) && comment.replies.length > 0) {
+            attachUserInfo(comment.replies)
+          }
         })
-      )
+      }
+      
+      const postsWithLatestInfo = postsData.map((post) => {
+        // Update post author info
+        if (post.userId) {
+          const userData = cache.get(post.userId)
+          if (userData) {
+            post.userAvatar = userData.avatar || ''
+            post.userDisplayName = userData.displayName || 'Người dùng'
+          }
+        }
+
+        // Update all comments with user info from cache
+        if (post.comments && Array.isArray(post.comments)) {
+          attachUserInfo(post.comments)
+        }
+
+        return post
+      })
       
       // Filter posts based on privacy settings
       const authStore = useAuthStore()

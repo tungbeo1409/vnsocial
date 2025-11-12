@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/config/firebase'
 import { useNotificationsStore } from './notifications'
+import { useUserCacheStore } from './userCache'
 
 export const useMessagesStore = defineStore('messages', () => {
   const conversations = ref([])
@@ -77,9 +78,9 @@ export const useMessagesStore = defineStore('messages', () => {
         })
       }
 
-      // Get from user data for avatar and name
-      const fromUserDoc = await getDoc(doc(db, 'users', fromUserId))
-      const fromUserData = fromUserDoc.exists() ? fromUserDoc.data() : {}
+      // Get from user data using cache
+      const userCacheStore = useUserCacheStore()
+      const fromUserData = await userCacheStore.getUser(fromUserId) || {}
 
       // Prepare message data
       const messageData = {
@@ -181,10 +182,11 @@ export const useMessagesStore = defineStore('messages', () => {
     }
   }
 
-  // Subscribe to messages in a conversation
-  // Load messages ordered by creation time (ascending) - newest at bottom for easy reading
-  // If callback is provided, use it instead of updating messages.value (for multiple chat windows)
-  const subscribeToMessages = (userId1, userId2, callback = null) => {
+  // Track message subscriptions to avoid duplicates
+  const messageSubscriptions = new Map() // Map<conversationId, {unsubscribe, count}>
+  
+  // Internal function to create subscription
+  const _subscribeToMessages = (userId1, userId2, callback = null) => {
     const conversationId = getConversationId(userId1, userId2)
     const messagesRef = collection(db, 'conversations', conversationId, 'messages')
     // Query all messages, ordered by creation time ascending (oldest first, newest last)
@@ -215,25 +217,27 @@ export const useMessagesStore = defineStore('messages', () => {
         return message
       })
       
-      // Always load latest user info for all messages
-      const messagesWithLatestInfo = await Promise.all(
-        messagesData.map(async (message) => {
-          if (message.fromUserId) {
-            try {
-              const userDoc = await getDoc(doc(db, 'users', message.fromUserId))
-              if (userDoc.exists()) {
-                const userData = userDoc.data()
-                // Always update with latest info from user profile
-                message.fromUserAvatar = userData.avatar || ''
-                message.fromUserName = userData.displayName || message.fromUserName || 'Người dùng'
-              }
-            } catch (error) {
-              console.error('Error loading user info for message:', error)
-            }
+      // Use user cache to load user info efficiently
+      const userCacheStore = useUserCacheStore()
+      const userIds = [...new Set(messagesData.map(m => m.fromUserId).filter(Boolean))]
+      await userCacheStore.getUsers(userIds) // Preload all users in batch
+      
+      // Attach user info from cache
+      const cache = userCacheStore.getUserCache()
+      const messagesWithLatestInfo = messagesData.map((message) => {
+        if (message.fromUserId) {
+          const userData = cache.get(message.fromUserId)
+          if (userData) {
+            message.fromUserAvatar = userData.avatar || ''
+            message.fromUserName = userData.displayName || 'Người dùng'
+          } else if (!message.fromUserName) {
+            // Fallback if cache miss
+            message.fromUserName = 'Người dùng'
+            message.fromUserAvatar = ''
           }
-          return message
-        })
-      )
+        }
+        return message
+      })
       
       // If callback provided, use it (for multiple chat windows)
       // Otherwise, update shared messages.value (for single chat view)
@@ -245,8 +249,36 @@ export const useMessagesStore = defineStore('messages', () => {
     })
   }
 
+  // Track active subscriptions to avoid duplicates
+  let conversationsUnsubscribe = null
+  let conversationsSubscribersCount = 0
+  let activeUserId = null
+  
   // Subscribe to conversations for a user with realtime unread count
   const subscribeToConversations = (userId) => {
+    // If already subscribed for this user, just increment counter
+    if (conversationsUnsubscribe && activeUserId === userId) {
+      conversationsSubscribersCount++
+      return () => {
+        conversationsSubscribersCount--
+        // Only unsubscribe when no one is listening
+        if (conversationsSubscribersCount === 0 && conversationsUnsubscribe) {
+          conversationsUnsubscribe()
+          conversationsUnsubscribe = null
+          activeUserId = null
+        }
+      }
+    }
+    
+    // If subscribed for different user, unsubscribe first
+    if (conversationsUnsubscribe) {
+      conversationsUnsubscribe()
+      conversationsUnsubscribe = null
+    }
+    
+    activeUserId = userId
+    conversationsSubscribersCount = 1
+    
     const conversationsRef = collection(db, 'conversations')
     const messageUnsubscribes = new Map() // Track unread message subscriptions
     
@@ -300,34 +332,20 @@ export const useMessagesStore = defineStore('messages', () => {
         
         const conversationId = docSnap.id
         
-        // Get other user's info
-        try {
-          const otherUserDoc = await getDoc(doc(db, 'users', otherUserId))
-          const otherUser = otherUserDoc.exists() 
-            ? { id: otherUserDoc.id, ...otherUserDoc.data() }
-            : null
+        // Use user cache to get other user info
+        const userCacheStore = useUserCacheStore()
+        const otherUser = await userCacheStore.getUser(otherUserId)
 
-          // Create conversation with initial unreadCount = 0
-          const conversation = {
-            id: conversationId,
-            ...data,
-            otherUser,
-            unreadCount: 0,
-            lastMessageTime: data.lastMessageTime?.toDate?.() || data.lastMessageTime || new Date()
-          }
-          
-          convs.push(conversation)
-        } catch (error) {
-          console.error('Error loading user info:', error)
-          // Still add conversation without user info
-          convs.push({
-            id: conversationId,
-            ...data,
-            otherUser: null,
-            unreadCount: 0,
-            lastMessageTime: data.lastMessageTime?.toDate?.() || data.lastMessageTime || new Date()
-          })
+        // Create conversation with initial unreadCount = 0
+        const conversation = {
+          id: conversationId,
+          ...data,
+          otherUser,
+          unreadCount: 0,
+          lastMessageTime: data.lastMessageTime?.toDate?.() || data.lastMessageTime || new Date()
         }
+        
+        convs.push(conversation)
       }
       
       // Sort by lastMessageTime (in case orderBy doesn't work)
@@ -368,24 +386,20 @@ export const useMessagesStore = defineStore('messages', () => {
             
             const conversationId = docSnap.id
             
-            try {
-              const otherUserDoc = await getDoc(doc(db, 'users', otherUserId))
-              const otherUser = otherUserDoc.exists() 
-                ? { id: otherUserDoc.id, ...otherUserDoc.data() }
-                : null
+            // Use user cache to get other user info
+            const userCacheStore = useUserCacheStore()
+            const otherUser = await userCacheStore.getUser(otherUserId)
 
-              // Create conversation with initial unreadCount = 0
-              const conversation = {
-                id: conversationId,
-                ...data,
-                otherUser,
-                unreadCount: 0,
-                lastMessageTime: data.lastMessageTime?.toDate?.() || data.lastMessageTime || new Date()
-              }
-              
-              convs.push(conversation)
-            } catch (err) {
-              console.error('Error loading user info:', err)
+            // Create conversation with initial unreadCount = 0
+            const conversation = {
+              id: conversationId,
+              ...data,
+              otherUser,
+              unreadCount: 0,
+              lastMessageTime: data.lastMessageTime?.toDate?.() || data.lastMessageTime || new Date()
+            }
+            
+            convs.push(conversation)
             }
           }
           
@@ -413,11 +427,56 @@ export const useMessagesStore = defineStore('messages', () => {
       }
     })
     
-    // Return cleanup function
-    return () => {
+    conversationsUnsubscribe = () => {
       unsubscribeConversations()
       messageUnsubscribes.forEach((unsub) => unsub())
       messageUnsubscribes.clear()
+    }
+    
+    return () => {
+      conversationsSubscribersCount--
+      // Only unsubscribe when no one is listening
+      if (conversationsSubscribersCount === 0 && conversationsUnsubscribe) {
+        conversationsUnsubscribe()
+        conversationsUnsubscribe = null
+        activeUserId = null
+      }
+    }
+  }
+  
+  // Optimized subscribeToMessages - reuse subscriptions
+  const subscribeToMessages = (userId1, userId2, callback = null) => {
+    const conversationId = getConversationId(userId1, userId2)
+    
+    // If already subscribed, just increment counter
+    if (messageSubscriptions.has(conversationId)) {
+      const sub = messageSubscriptions.get(conversationId)
+      sub.count++
+      return () => {
+        sub.count--
+        if (sub.count === 0) {
+          sub.unsubscribe()
+          messageSubscriptions.delete(conversationId)
+        }
+      }
+    }
+    
+    // Create new subscription using internal function
+    const unsubscribe = _subscribeToMessages(userId1, userId2, callback)
+    messageSubscriptions.set(conversationId, {
+      unsubscribe,
+      count: 1
+    })
+    
+    return () => {
+      const sub = messageSubscriptions.get(conversationId)
+      if (sub) {
+        sub.count--
+        if (sub.count === 0) {
+          sub.unsubscribe()
+          messageSubscriptions.delete(conversationId)
+        }
+      }
     }
   }
 

@@ -65,15 +65,43 @@ export const useNotificationsStore = defineStore('notifications', () => {
     }
   }
 
+  // Track active subscription to avoid duplicates
+  let notificationsUnsubscribe = null
+  let notificationsSubscribersCount = 0
+  let activeNotificationsUserId = null
+  
   // Subscribe to notifications - đơn giản: dùng onSnapshot realtime
   const subscribeToNotifications = (userId) => {
+    // If already subscribed for this user, just increment counter
+    if (notificationsUnsubscribe && activeNotificationsUserId === userId) {
+      notificationsSubscribersCount++
+      return () => {
+        notificationsSubscribersCount--
+        // Only unsubscribe when no one is listening
+        if (notificationsSubscribersCount === 0 && notificationsUnsubscribe) {
+          notificationsUnsubscribe()
+          notificationsUnsubscribe = null
+          activeNotificationsUserId = null
+        }
+      }
+    }
+    
+    // If subscribed for different user, unsubscribe first
+    if (notificationsUnsubscribe) {
+      notificationsUnsubscribe()
+      notificationsUnsubscribe = null
+    }
+    
+    activeNotificationsUserId = userId
+    notificationsSubscribersCount = 1
+    
     const q = query(
       collection(db, 'notifications'),
       where('toUserId', '==', userId),
       orderBy('createdAt', 'desc')
     )
 
-    return onSnapshot(q, 
+    notificationsUnsubscribe = onSnapshot(q, 
       // Success: cập nhật notifications realtime
       (snapshot) => {
         const loadedNotifications = snapshot.docs.map(doc => ({
@@ -95,7 +123,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
             collection(db, 'notifications'),
             where('toUserId', '==', userId)
           )
-          return onSnapshot(simpleQ, (snapshot) => {
+          notificationsUnsubscribe = onSnapshot(simpleQ, (snapshot) => {
             const loadedNotifications = snapshot.docs.map(doc => ({
               id: doc.id,
               ...doc.data(),
@@ -107,11 +135,22 @@ export const useNotificationsStore = defineStore('notifications', () => {
             console.log('Message notifications:', loadedNotifications.filter(n => n.type === 'message').length)
             console.log('Other notifications:', loadedNotifications.filter(n => n.type !== 'message').length)
           })
+          return notificationsUnsubscribe
         }
         notifications.value = []
         unreadCount.value = 0
       }
     )
+    
+    return () => {
+      notificationsSubscribersCount--
+      // Only unsubscribe when no one is listening
+      if (notificationsSubscribersCount === 0 && notificationsUnsubscribe) {
+        notificationsUnsubscribe()
+        notificationsUnsubscribe = null
+        activeNotificationsUserId = null
+      }
+    }
   }
 
   // Mark notification as read

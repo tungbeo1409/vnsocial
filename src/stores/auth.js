@@ -55,15 +55,21 @@ export const useAuthStore = defineStore('auth', () => {
 
   const loadUserProfile = async (uid) => {
     try {
-      const userDoc = await getDoc(doc(db, 'users', uid))
-      if (userDoc.exists()) {
-        userProfile.value = { id: userDoc.id, ...userDoc.data() }
+      // Use user cache if available
+      const { useUserCacheStore } = await import('./userCache')
+      const userCacheStore = useUserCacheStore()
+      const userData = await userCacheStore.getUser(uid)
+      if (userData) {
+        userProfile.value = userData
+        // Also update cache with this data
+        userCacheStore.updateUser(uid, userData)
       }
     } catch (error) {
       console.error('Error loading user profile:', error)
     }
   }
-
+  
+  // Clear cache on logout
   const login = async (email, password) => {
     loading.value = true
     try {
@@ -108,6 +114,12 @@ export const useAuthStore = defineStore('auth', () => {
   const logout = async () => {
     try {
       await signOut(auth)
+      user.value = null
+      userProfile.value = null
+      // Clear user cache on logout
+      const { useUserCacheStore } = await import('./userCache')
+      const userCacheStore = useUserCacheStore()
+      userCacheStore.clearCache()
       return { success: true }
     } catch (error) {
       return { success: false, error: error.message }

@@ -30,14 +30,6 @@
       
       <!-- Right Side: Icons -->
       <div class="flex items-center gap-2 flex-shrink-0">
-        <button
-          v-if="authStore.user"
-          @click="showCreateGroupModal = true"
-          class="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-700"
-          title="Tạo nhóm"
-        >
-          <Icon name="users" :size="22" />
-        </button>
         <div v-if="showMessageButton" class="relative" ref="chatButtonContainerRef">
           <button
             @click.stop="toggleChatPopup"
@@ -146,13 +138,6 @@
       </div>
     </div>
   </header>
-
-  <!-- Create Group Modal -->
-  <CreateGroupModal 
-    :show="showCreateGroupModal" 
-    @close="showCreateGroupModal = false"
-    @created="handleGroupCreated"
-  />
 </template>
 
 <script setup>
@@ -162,7 +147,6 @@ import { useAuthStore } from '@/stores/auth'
 import { useMessagesStore } from '@/stores/messages'
 import NotificationBell from '@/components/NotificationBell.vue'
 import ChatWidgetPopup from '@/components/ChatWidgetPopup.vue'
-import CreateGroupModal from '@/components/CreateGroupModal.vue'
 import Icon from '@/components/Icon.vue'
 import { chatBus } from '@/utils/chatBus'
 
@@ -180,7 +164,6 @@ const searchQuery = ref('')
 const showSearchSuggestions = ref(false)
 const showChatPopup = ref(false)
 const showUserMenu = ref(false)
-const showCreateGroupModal = ref(false)
 const unreadMessagesCount = ref(0)
 const notificationBellRef = ref(null)
 const isDarkMode = ref(false)
@@ -188,10 +171,6 @@ const chatPopupRef = ref(null)
 const chatButtonContainerRef = ref(null)
 const userMenuContainerRef = ref(null)
 
-const handleGroupCreated = (groupId) => {
-  // Group created successfully, modal will close automatically
-  // Could navigate to group chat here if needed
-}
 
 const toggleChatPopup = (event) => {
   event?.stopPropagation()

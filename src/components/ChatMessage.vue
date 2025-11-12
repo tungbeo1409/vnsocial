@@ -68,7 +68,7 @@
       <!-- Time Popup (for other user's messages) -->
       <Transition name="slide-down">
         <div
-          v-if="!isOwnMessage && showTimePopup && props.otherUserId"
+          v-if="!isOwnMessage && showTimePopup && !props.otherUserId"
           ref="timePopupRef"
           class="absolute z-50 bg-white rounded-md shadow-apple border border-gray-200/60 py-1 min-w-[110px]"
           :class="[
@@ -112,9 +112,19 @@
       </div>
       <div v-else-if="shouldShowAvatar && !isOwnMessage" class="flex-shrink-0 w-8"></div>
       
+      <!-- System Message -->
+      <div
+        v-if="message.type === 'system'"
+        class="w-full flex items-center justify-center my-2"
+      >
+        <p class="text-xs text-gray-500 italic bg-gray-100 px-3 py-1 rounded-full">
+          {{ message.content }}
+        </p>
+      </div>
+      
       <!-- Deleted Message -->
       <div
-        v-if="message.deleted"
+        v-if="message.deleted && message.type !== 'system'"
         class="max-w-xs lg:max-w-md overflow-visible relative"
         :class="[
           isOwnMessage ? 'ml-auto' : '',
@@ -128,7 +138,7 @@
       
       <!-- Audio/Voice - No bubble, just the player -->
       <div
-        v-else-if="message.fileType === 'audio'"
+        v-else-if="message.fileType === 'audio' && message.type !== 'system'"
         class="max-w-xs lg:max-w-md overflow-visible relative group/bubble cursor-pointer"
         :class="[
           isOwnMessage ? 'ml-auto' : '',
@@ -152,7 +162,7 @@
 
       <!-- Multiple Images - No bubble, just the grid -->
       <div
-        v-else-if="message.fileType === 'images' && message.images && Array.isArray(message.images) && !message.deleted"
+        v-else-if="message.fileType === 'images' && message.images && Array.isArray(message.images) && !message.deleted && message.type !== 'system'"
         class="max-w-xs lg:max-w-md overflow-visible relative group/bubble cursor-pointer"
         :class="[
           isOwnMessage ? 'ml-auto' : '',
@@ -192,7 +202,7 @@
 
       <!-- Single Image - No bubble, just the image -->
       <div
-        v-else-if="message.fileType === 'image' && !message.deleted"
+        v-else-if="message.fileType === 'image' && !message.deleted && message.type !== 'system'"
         class="max-w-xs lg:max-w-md overflow-visible relative group/bubble cursor-pointer"
         :class="[
           isOwnMessage ? 'ml-auto' : '',
@@ -218,7 +228,7 @@
 
       <!-- Other message types - with bubble -->
       <div
-        v-else-if="!message.deleted"
+        v-else-if="!message.deleted && message.type !== 'system'"
         class="max-w-xs lg:max-w-md rounded-2xl shadow-apple transition-all duration-200 hover:shadow-apple-lg overflow-visible relative group/bubble"
         :class="[
           isOwnMessage 
@@ -711,7 +721,8 @@ const canEdit = computed(() => {
 
 // Handle click on message to toggle menu
 const handleMessageClick = () => {
-  if (!props.otherUserId || props.message.deleted) return
+  // Don't show popup for system messages or deleted messages
+  if (props.message.type === 'system' || props.message.deleted) return
   
   // For own messages - show menu with actions
   if (isOwnMessage.value) {
@@ -731,14 +742,15 @@ const handleMessageClick = () => {
       showMenu.value = !showMenu.value
     }
   } else {
-    // For other user's messages - show time popup only
+    // For other user's messages - show time popup
+    // Works for both regular chat (otherUserId) and group chat (no otherUserId)
     showTimePopup.value = !showTimePopup.value
   }
 }
 
 // Start editing (can be called from external button if needed)
 const startEditing = () => {
-  if (!canEdit.value || !props.otherUserId || !setEditingMessage) return
+  if (!canEdit.value || !setEditingMessage) return
   setEditingMessage(props.message.id, props.message.content)
   showMenu.value = false
   if (openMenuMessageId) {
@@ -748,9 +760,8 @@ const startEditing = () => {
 
 // Handle reply
 const handleReply = () => {
-  console.log('handleReply called', { otherUserId: props.otherUserId, setReplyingToMessage: !!setReplyingToMessage })
-  if (!props.otherUserId || !setReplyingToMessage) {
-    console.warn('Cannot reply: missing otherUserId or setReplyingToMessage')
+  if (!setReplyingToMessage) {
+    console.warn('Cannot reply: missing setReplyingToMessage')
     return
   }
   setReplyingToMessage(props.message)

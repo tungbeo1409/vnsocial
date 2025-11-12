@@ -42,7 +42,8 @@ import {
   ArrowRightOnRectangleIcon,
   Cog6ToothIcon,
   MoonIcon,
-  SunIcon
+  SunIcon,
+  ChevronRightIcon
 } from '@heroicons/vue/24/outline'
 import {
   HeartIcon as HeartSolidIcon,
@@ -103,7 +104,8 @@ const iconMap = {
   logout: ArrowRightOnRectangleIcon,
   settings: Cog6ToothIcon,
   moon: MoonIcon,
-  sun: SunIcon
+  sun: SunIcon,
+  chevronRight: ChevronRightIcon
 }
 
 const iconComponent = computed(() => {

@@ -84,21 +84,26 @@ service cloud.firestore {
         request.auth.uid == request.resource.data.createdBy &&
         request.auth.uid in request.resource.data.members;
       
-      // Cho phép update nếu đã đăng nhập và là member
-      // (để thêm/xóa members, update pendingInvites)
-      allow update: if request.auth != null && 
-        request.auth.uid in resource.data.members;
+      // Cho phép update nếu đã đăng nhập và là member hoặc trong pendingInvites
+      // (để thêm/xóa members, update pendingInvites, accept invite)
+      allow update: if request.auth != null && (
+        request.auth.uid in resource.data.members ||
+        request.auth.uid in resource.data.pendingInvites
+      );
       
       // Không cho phép xóa nhóm
       allow delete: if false;
       
       // ========== GROUP MESSAGES SUBCOLLECTION ==========
       match /messages/{messageId} {
-        // Cho phép đọc nếu đã đăng nhập và là member
-        allow read: if request.auth != null && 
-          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        // Cho phép đọc nếu đã đăng nhập và là member hoặc trong pendingInvites
+        allow read: if request.auth != null && (
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members ||
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.pendingInvites
+        );
         
         // Cho phép tạo nếu đã đăng nhập và là member
+        // (system messages được tạo sau khi user đã là member)
         allow create: if request.auth != null && 
           request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
         
