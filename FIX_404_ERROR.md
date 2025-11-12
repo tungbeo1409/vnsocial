@@ -71,7 +71,42 @@ File `public/404.html` sẽ được copy vào `dist/404.html` khi build.
 
 ## Troubleshooting
 
-### Lỗi: "Failed to load resource: 404"
+### Lỗi: "Failed to load resource: 404" cho logo.png hoặc các file static
+
+**Nguyên nhân**: File static không tìm thấy trên GitHub Pages
+
+**Giải pháp**:
+1. **Kiểm tra file có trong dist/**:
+   ```bash
+   npm run build
+   ls dist/logo.png  # Kiểm tra file có tồn tại không
+   ```
+
+2. **Kiểm tra đường dẫn trong index.html**:
+   - Mở `dist/index.html`
+   - Kiểm tra đường dẫn: `href="/logo.png"` (phải bắt đầu bằng `/`)
+   - Với base path `/`, đường dẫn `/logo.png` là đúng
+
+3. **Push lại và đợi GitHub Actions build**:
+   ```bash
+   git add .
+   git commit -m "Fix static files"
+   git push
+   ```
+   - Đợi GitHub Actions build xong (1-2 phút)
+   - Clear cache và test lại
+
+4. **Kiểm tra GitHub Pages đã deploy đúng chưa**:
+   - Vào repository > Settings > Pages
+   - Kiểm tra source là "GitHub Actions"
+   - Kiểm tra workflow đã chạy xong chưa
+
+5. **Clear cache trình duyệt**:
+   - Ctrl+Shift+Delete → Clear "Cached images and files"
+   - Hoặc dùng Incognito/Private mode
+   - Hard refresh: Ctrl+F5
+
+### Lỗi: "Failed to load resource: 404" cho assets
 
 **Nguyên nhân**: Assets không tìm thấy
 
