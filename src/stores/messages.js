@@ -400,7 +400,6 @@ export const useMessagesStore = defineStore('messages', () => {
             }
             
             convs.push(conversation)
-            }
           }
           
           // Sort by lastMessageTime manually
@@ -418,19 +417,28 @@ export const useMessagesStore = defineStore('messages', () => {
           })
         })
         
-        // Replace the unsubscribe function to handle simple query cleanup
-        return () => {
+        // Replace conversationsUnsubscribe with simple query cleanup
+        conversationsUnsubscribe = () => {
           unsubscribeSimple()
+          messageUnsubscribes.forEach((unsub) => unsub())
+          messageUnsubscribes.clear()
+        }
+      } else {
+        // For other errors, set up basic cleanup
+        conversationsUnsubscribe = () => {
           messageUnsubscribes.forEach((unsub) => unsub())
           messageUnsubscribes.clear()
         }
       }
     })
     
-    conversationsUnsubscribe = () => {
-      unsubscribeConversations()
-      messageUnsubscribes.forEach((unsub) => unsub())
-      messageUnsubscribes.clear()
+    // Set up conversationsUnsubscribe if not already set (for successful subscription)
+    if (!conversationsUnsubscribe) {
+      conversationsUnsubscribe = () => {
+        unsubscribeConversations()
+        messageUnsubscribes.forEach((unsub) => unsub())
+        messageUnsubscribes.clear()
+      }
     }
     
     return () => {
