@@ -3,46 +3,72 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VN Social</title>
+    <title>VN Social - Redirecting...</title>
     <script>
       // GitHub Pages 404.html workaround for Vue Router history mode
       // This file redirects all 404 routes to index.html so Vue Router can handle them
       
       (function() {
         var l = window.location;
-        var basePath = '/vnsocial/'; // Match your vite.config.js REPO_NAME
-        var currentPath = l.pathname;
+        var hostname = l.hostname;
+        var pathname = l.pathname;
         
-        // Remove basePath from current path if present
-        var pathWithoutBase = currentPath;
-        if (currentPath.startsWith(basePath)) {
-          pathWithoutBase = currentPath.slice(basePath.length - 1); // Keep the leading /
+        // Don't redirect if we're already at index.html
+        if (pathname.includes('index.html')) {
+          return;
+        }
+        
+        // Determine base path based on hostname
+        // If localhost or 127.0.0.1, use '/' (development)
+        // Otherwise use '/vnsocial/' (GitHub Pages production)
+        var basePath = (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') 
+          ? '/' 
+          : '/vnsocial/';
+        
+        // Get the route path (path after basePath)
+        var routePath = pathname;
+        if (basePath !== '/' && routePath.startsWith(basePath)) {
+          routePath = routePath.slice(basePath.length - 1); // Keep the leading /
+        }
+        
+        // Ensure routePath starts with /
+        if (!routePath.startsWith('/')) {
+          routePath = '/' + routePath;
         }
         
         // Build the redirect URL
-        var redirectUrl = l.protocol + '//' + l.host + basePath + 'index.html' + pathWithoutBase + l.search + l.hash;
+        var redirectUrl = l.protocol + '//' + l.host + basePath + 'index.html' + routePath + l.search + l.hash;
         
         // Redirect immediately
-        l.replace(redirectUrl);
+        window.location.replace(redirectUrl);
       })();
     </script>
   </head>
   <body>
-    <div id="app"></div>
     <p style="text-align: center; padding: 20px; font-family: Arial, sans-serif;">
       Đang chuyển hướng...
     </p>
     <script>
-      // Fallback redirect after 500ms if the above didn't work
+      // Fallback: if redirect didn't work, try again after 1 second
       setTimeout(function() {
         var l = window.location;
-        var basePath = '/vnsocial/';
-        var pathWithoutBase = l.pathname;
-        if (pathWithoutBase.startsWith(basePath)) {
-          pathWithoutBase = pathWithoutBase.slice(basePath.length - 1);
+        var hostname = l.hostname;
+        var pathname = l.pathname;
+        
+        if (!pathname.includes('index.html')) {
+          var basePath = (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') 
+            ? '/' 
+            : '/vnsocial/';
+          var routePath = pathname;
+          if (basePath !== '/' && routePath.startsWith(basePath)) {
+            routePath = routePath.slice(basePath.length - 1);
+          }
+          if (!routePath.startsWith('/')) {
+            routePath = '/' + routePath;
+          }
+          window.location.replace(l.protocol + '//' + l.host + basePath + 'index.html' + routePath + l.search + l.hash);
         }
-        l.replace(l.protocol + '//' + l.host + basePath + 'index.html' + pathWithoutBase + l.search + l.hash);
-      }, 500);
+      }, 1000);
     </script>
   </body>
 </html>
