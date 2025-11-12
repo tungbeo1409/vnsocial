@@ -99,6 +99,22 @@ Sau khi workflow chạy xong, trang web sẽ có tại:
 
 ## Troubleshooting
 
+### Lỗi 404 khi reload trang (ví dụ: /profile/user123)
+
+**Nguyên nhân**: GitHub Pages không hỗ trợ server-side routing cho SPA
+
+**Giải pháp**: File `public/404.html` đã được tạo để tự động redirect về `index.html`
+
+**Cách hoạt động**:
+1. Khi bạn reload trang `/profile/user123`, GitHub Pages trả về 404
+2. File `404.html` sẽ tự động redirect về `/vnsocial/index.html/profile/user123`
+3. Vue Router sẽ xử lý routing và hiển thị đúng trang
+
+**Lưu ý**: 
+- File `404.html` đã có sẵn trong project
+- Đảm bảo `basePath` trong `404.html` khớp với `REPO_NAME` trong `vite.config.js`
+- Nếu đổi tên repo, cập nhật cả 2 file
+
 ### Lỗi 404 khi truy cập GitHub Pages
 
 **Nguyên nhân**: Base path không đúng
@@ -106,7 +122,8 @@ Sau khi workflow chạy xong, trang web sẽ có tại:
 **Giải pháp**:
 1. Kiểm tra `vite.config.js` - base path phải khớp với repository name
 2. Kiểm tra repository name trên GitHub
-3. Rebuild và push lại:
+3. Cập nhật `basePath` trong `public/404.html` cho khớp
+4. Rebuild và push lại:
 
 ```bash
 npm run build

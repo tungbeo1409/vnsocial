@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VN Social</title>
+    <script>
+      // GitHub Pages 404.html workaround for Vue Router history mode
+      // This file redirects all 404 routes to index.html so Vue Router can handle them
+      
+      (function() {
+        var l = window.location;
+        var basePath = '/vnsocial/'; // Match your vite.config.js REPO_NAME
+        var currentPath = l.pathname;
+        
+        // Remove basePath from current path if present
+        var pathWithoutBase = currentPath;
+        if (currentPath.startsWith(basePath)) {
+          pathWithoutBase = currentPath.slice(basePath.length - 1); // Keep the leading /
+        }
+        
+        // Build the redirect URL
+        var redirectUrl = l.protocol + '//' + l.host + basePath + 'index.html' + pathWithoutBase + l.search + l.hash;
+        
+        // Redirect immediately
+        l.replace(redirectUrl);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <p style="text-align: center; padding: 20px; font-family: Arial, sans-serif;">
+      Đang chuyển hướng...
+    </p>
+    <script>
+      // Fallback redirect after 500ms if the above didn't work
+      setTimeout(function() {
+        var l = window.location;
+        var basePath = '/vnsocial/';
+        var pathWithoutBase = l.pathname;
+        if (pathWithoutBase.startsWith(basePath)) {
+          pathWithoutBase = pathWithoutBase.slice(basePath.length - 1);
+        }
+        l.replace(l.protocol + '//' + l.host + basePath + 'index.html' + pathWithoutBase + l.search + l.hash);
+      }, 500);
+    </script>
+  </body>
+</html>
+
