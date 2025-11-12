@@ -4,14 +4,15 @@ import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
 // Firebase configuration
+// ⚠️ THAY THẾ CÁC GIÁ TRỊ SAU BẰNG CONFIG TỪ FIREBASE PROJECT MỚI CỦA BẠN
 const firebaseConfig = {
-  apiKey: "AIzaSyDwJ43qUAnpmjNA2p24hTxId4NQi-tmj4Q",
-  authDomain: "vnsocial-6412b.firebaseapp.com",
-  projectId: "vnsocial-6412b",
-  storageBucket: "vnsocial-6412b.firebasestorage.app",
-  messagingSenderId: "959429594529",
-  appId: "1:959429594529:web:3d03809a54f57112100fe0",
-  measurementId: "G-GLSMHG9B03"
+  apiKey: "YOUR_API_KEY_HERE",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID",
+  measurementId: "YOUR_MEASUREMENT_ID" // Optional, chỉ có nếu bật Analytics
 }
 
 // Initialize Firebase
@@ -23,3 +24,4 @@ export const db = getFirestore(app)
 export const storage = getStorage(app)
 
 export default app
+

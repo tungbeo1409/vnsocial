@@ -1,138 +1,232 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ========== USERS COLLECTION ==========
+    
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user is the owner
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Get conversation participants safely
+    function getConversationParticipants(conversationId) {
+      let conv = get(/databases/$(database)/documents/conversations/$(conversationId));
+      return conv != null && conv.data != null && conv.data.participants != null 
+        ? conv.data.participants 
+        : [];
+    }
+    
+    // Check if user is participant in conversation
+    function isConversationParticipant(conversationId) {
+      return isAuthenticated() && 
+             request.auth.uid in getConversationParticipants(conversationId);
+    }
+    
+    // Get group data safely
+    function getGroupData(groupId) {
+      let group = get(/databases/$(database)/documents/groups/$(groupId));
+      return group != null && group.data != null ? group.data : null;
+    }
+    
+    // Check if user is group member
+    function isGroupMember(groupId) {
+      let groupData = getGroupData(groupId);
+      return isAuthenticated() && 
+             groupData != null &&
+             groupData.members != null &&
+             request.auth.uid in groupData.members;
+    }
+    
+    // Check if user is in group pending invites
+    function isGroupPendingInvite(groupId) {
+      let groupData = getGroupData(groupId);
+      return isAuthenticated() && 
+             groupData != null &&
+             groupData.pendingInvites != null &&
+             request.auth.uid in groupData.pendingInvites;
+    }
+    
+    // Check if user can access group (member or pending invite)
+    function canAccessGroup(groupId) {
+      return isGroupMember(groupId) || isGroupPendingInvite(groupId);
+    }
+    
+    // ============================================
+    // USERS COLLECTION
+    // ============================================
     match /users/{userId} {
-      // Cho phép đọc tất cả user profiles (để tìm kiếm)
+      // Cho phép đọc tất cả user profiles (để tìm kiếm bạn bè)
       allow read: if true;
       
       // Cho phép user tự tạo profile của mình
-      allow create: if request.auth != null && request.auth.uid == userId;
+      allow create: if isOwner(userId);
       
       // Cho phép update:
       // - User tự update profile của mình
-      // - User update friendRequests, friends, sentRequests (khi gửi/nhận/hủy lời mời)
-      // - Bất kỳ user nào cũng có thể update groupInvites (để mời vào nhóm hoặc accept/reject)
-      allow update: if request.auth != null && (
-        // User tự update
-        request.auth.uid == userId ||
-        // Cho phép update friendRequests, friends, sentRequests, groupInvites
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friendRequests', 'friends', 'sentRequests', 'groupInvites'])
+      // - Bất kỳ user nào cũng có thể update friendRequests, friends, sentRequests, groupInvites
+      //   (để gửi/nhận/hủy lời mời kết bạn hoặc accept/reject group invite)
+      allow update: if isAuthenticated() && (
+        // User tự update profile
+        isOwner(userId) ||
+        // Cho phép update các field liên quan đến friends và groups
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'friendRequests', 
+          'friends', 
+          'sentRequests', 
+          'groupInvites'
+        ])
       );
       
       // Cho phép user tự xóa profile
-      allow delete: if request.auth != null && request.auth.uid == userId;
+      allow delete: if isOwner(userId);
     }
     
-    // ========== POSTS COLLECTION ==========
+    // ============================================
+    // POSTS COLLECTION
+    // ============================================
     match /posts/{postId} {
       // Cho phép đọc tất cả posts
       allow read: if true;
+      
       // Chỉ user đã đăng nhập mới được tạo post
-      allow create: if request.auth != null;
+      allow create: if isAuthenticated();
+      
       // Chỉ user đã đăng nhập mới được update (like, comment)
-      allow update: if request.auth != null;
+      allow update: if isAuthenticated();
+      
       // Chỉ chủ post mới được xóa
-      allow delete: if request.auth != null && 
-        resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+                    resource.data.userId == request.auth.uid;
     }
     
-    // ========== CONVERSATIONS COLLECTION ==========
+    // ============================================
+    // CONVERSATIONS COLLECTION
+    // ============================================
     match /conversations/{conversationId} {
       // Cho phép đọc nếu đã đăng nhập và là participant
-      allow read: if request.auth != null && 
-        request.auth.uid in resource.data.participants;
+      allow read: if isAuthenticated() && 
+                  resource.data.participants != null &&
+                  request.auth.uid in resource.data.participants;
       
-      // Cho phép tạo nếu đã đăng nhập
-      allow create: if request.auth != null;
+      // Cho phép tạo conversation nếu đã đăng nhập
+      // (participants sẽ được set trong code)
+      allow create: if isAuthenticated();
       
       // Cho phép update nếu đã đăng nhập và là participant
-      allow update: if request.auth != null && 
-        request.auth.uid in resource.data.participants;
+      // (để update lastMessage, lastMessageTime, participants)
+      allow update: if isAuthenticated() && 
+                    resource.data.participants != null &&
+                    request.auth.uid in resource.data.participants;
       
-      // Không cho phép xóa
+      // Không cho phép xóa conversation
       allow delete: if false;
       
-      // ========== MESSAGES SUBCOLLECTION ==========
+      // ============================================
+      // MESSAGES SUBCOLLECTION
+      // ============================================
       match /messages/{messageId} {
-        // Cho phép đọc nếu đã đăng nhập
-        allow read: if request.auth != null;
+        // Cho phép đọc nếu đã đăng nhập và là participant trong conversation
+        allow read: if isConversationParticipant(conversationId);
         
-        // Cho phép tạo nếu đã đăng nhập
-        allow create: if request.auth != null;
+        // Cho phép tạo message nếu:
+        // - Đã đăng nhập
+        // - Là người gửi (fromUserId)
+        // - Là participant trong conversation
+        allow create: if isAuthenticated() &&
+                      request.resource.data.fromUserId == request.auth.uid &&
+                      isConversationParticipant(conversationId);
         
-        // Cho phép update nếu là người gửi (để edit message)
-        allow update: if request.auth != null && 
-          request.auth.uid == resource.data.fromUserId;
+        // Cho phép update nếu:
+        // - Là người gửi (để edit message)
+        // - Là người nhận (để mark as read)
+        allow update: if isAuthenticated() && (
+          request.auth.uid == resource.data.fromUserId ||
+          request.auth.uid == resource.data.toUserId
+        );
         
         // Cho phép xóa nếu là người gửi
-        allow delete: if request.auth != null && 
-          request.auth.uid == resource.data.fromUserId;
+        allow delete: if isAuthenticated() && 
+                      request.auth.uid == resource.data.fromUserId;
       }
     }
     
-    // ========== GROUPS COLLECTION ==========
+    // ============================================
+    // GROUPS COLLECTION
+    // ============================================
     match /groups/{groupId} {
       // Cho phép đọc nếu đã đăng nhập và là member hoặc được mời
-      allow read: if request.auth != null && (
-        request.auth.uid in resource.data.members ||
-        request.auth.uid in resource.data.pendingInvites
+      allow read: if isAuthenticated() && (
+        (resource.data.members != null && request.auth.uid in resource.data.members) ||
+        (resource.data.pendingInvites != null && request.auth.uid in resource.data.pendingInvites)
       );
       
-      // Cho phép tạo nếu đã đăng nhập và là creator
-      allow create: if request.auth != null && 
-        request.auth.uid == request.resource.data.createdBy &&
-        request.auth.uid in request.resource.data.members;
+      // Cho phép tạo group nếu:
+      // - Đã đăng nhập
+      // - Là creator (createdBy)
+      // - Là member (trong members array)
+      allow create: if isAuthenticated() && 
+                    request.resource.data.createdBy == request.auth.uid &&
+                    request.resource.data.members != null &&
+                    request.auth.uid in request.resource.data.members;
       
       // Cho phép update nếu đã đăng nhập và là member hoặc trong pendingInvites
       // (để thêm/xóa members, update pendingInvites, accept invite)
-      allow update: if request.auth != null && (
-        request.auth.uid in resource.data.members ||
-        request.auth.uid in resource.data.pendingInvites
+      allow update: if isAuthenticated() && (
+        (resource.data.members != null && request.auth.uid in resource.data.members) ||
+        (resource.data.pendingInvites != null && request.auth.uid in resource.data.pendingInvites)
       );
       
       // Không cho phép xóa nhóm
       allow delete: if false;
       
-      // ========== GROUP MESSAGES SUBCOLLECTION ==========
+      // ============================================
+      // GROUP MESSAGES SUBCOLLECTION
+      // ============================================
       match /messages/{messageId} {
-        // Cho phép đọc nếu đã đăng nhập và là member hoặc trong pendingInvites
-        allow read: if request.auth != null && (
-          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members ||
-          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.pendingInvites
-        );
+        // Cho phép đọc nếu đã đăng nhập và có thể truy cập group (member hoặc pending invite)
+        allow read: if canAccessGroup(groupId);
         
-        // Cho phép tạo nếu đã đăng nhập và là member
+        // Cho phép tạo message nếu đã đăng nhập và là member
         // (system messages được tạo sau khi user đã là member)
-        allow create: if request.auth != null && 
-          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        allow create: if isGroupMember(groupId);
         
         // Cho phép update nếu là người gửi (để edit message)
-        allow update: if request.auth != null && 
-          request.auth.uid == resource.data.fromUserId;
+        allow update: if isAuthenticated() && 
+                      request.auth.uid == resource.data.fromUserId;
         
         // Cho phép xóa nếu là người gửi
-        allow delete: if request.auth != null && 
-          request.auth.uid == resource.data.fromUserId;
+        allow delete: if isAuthenticated() && 
+                      request.auth.uid == resource.data.fromUserId;
       }
     }
     
-    // ========== NOTIFICATIONS COLLECTION ==========
+    // ============================================
+    // NOTIFICATIONS COLLECTION
+    // ============================================
     match /notifications/{notificationId} {
       // Cho phép đọc nếu đã đăng nhập và là người nhận
-      allow read: if request.auth != null && 
-        request.auth.uid == resource.data.toUserId;
+      allow read: if isAuthenticated() && 
+                  resource.data.toUserId == request.auth.uid;
       
-      // Cho phép tạo nếu đã đăng nhập
-      allow create: if request.auth != null;
+      // Cho phép tạo notification nếu đã đăng nhập
+      // (không được gửi cho chính mình - được xử lý ở code)
+      allow create: if isAuthenticated();
       
       // Cho phép update nếu đã đăng nhập và là người nhận (để mark as read)
-      allow update: if request.auth != null && 
-        request.auth.uid == resource.data.toUserId;
+      allow update: if isAuthenticated() && 
+                    resource.data.toUserId == request.auth.uid &&
+                    request.resource.data.toUserId == resource.data.toUserId;
       
-      // Không cho phép xóa
+      // Không cho phép xóa notification
       allow delete: if false;
     }
   }
 }
-

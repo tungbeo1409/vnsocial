@@ -152,29 +152,7 @@ watch(() => authStore.user, (newUser, oldUser) => {
 }, { immediate: false })
 
 // Listen to chat bus for opening chats
-// Disable right-click context menu on entire app
-const disableContextMenu = (e) => {
-  e.preventDefault()
-  return false
-}
-
-const disableKeyboardShortcuts = (e) => {
-  // Disable F12 (DevTools), Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
-  if (e.key === 'F12' || 
-      (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J')) ||
-      (e.ctrlKey && e.key === 'U')) {
-    e.preventDefault()
-    return false
-  }
-}
-
 onMounted(() => {
-  // Disable context menu (right-click)
-  document.addEventListener('contextmenu', disableContextMenu)
-  
-  // Disable common keyboard shortcuts that open context menu
-  document.addEventListener('keydown', disableKeyboardShortcuts)
-  
   chatBus.onOpenChat(handleManualOpenChat)
   
   // Subscribe to unread messages để detect tin nhắn mới
@@ -192,10 +170,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  // Remove context menu disable listeners
-  document.removeEventListener('contextmenu', disableContextMenu)
-  document.removeEventListener('keydown', disableKeyboardShortcuts)
-  
   chatBus.offOpenChat(handleManualOpenChat)
   
   // Unsubscribe from unread messages

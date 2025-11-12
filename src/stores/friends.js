@@ -204,10 +204,19 @@ export const useFriendsStore = defineStore('friends', () => {
   // Get friend requests for current user
   const loadFriendRequests = async (userId) => {
     try {
+      // Validate userId
+      if (!userId || typeof userId !== 'string') {
+        console.warn('Invalid userId in loadFriendRequests:', userId)
+        return []
+      }
+      
       const userDoc = await getDoc(doc(db, 'users', userId))
       if (userDoc.exists()) {
         const userData = userDoc.data()
-        // Ensure friendRequests is an array
+        // Ensure userData exists and friendRequests is an array
+        if (!userData) {
+          return []
+        }
         const requestIds = Array.isArray(userData.friendRequests) ? userData.friendRequests : []
         
         // Get user details for each request

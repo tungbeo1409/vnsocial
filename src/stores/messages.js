@@ -15,7 +15,8 @@ import {
   deleteDoc,
   setDoc,
   writeBatch,
-  serverTimestamp
+  serverTimestamp,
+  arrayUnion
 } from 'firebase/firestore'
 import { db } from '@/config/firebase'
 import { useNotificationsStore } from './notifications'
@@ -63,19 +64,68 @@ export const useMessagesStore = defineStore('messages', () => {
 
       // Check if conversation exists, create if not
       const conversationDoc = await getDoc(conversationRef)
-      if (!conversationDoc.exists()) {
-        await setDoc(conversationRef, {
-          participants: [fromUserId, toUserId],
-          lastMessage: lastMessageText,
-          lastMessageTime: serverTimestamp(),
-          createdAt: serverTimestamp()
-        })
-      } else {
+      let conversationExists = conversationDoc.exists()
+      
+      if (!conversationExists) {
+        // Create new conversation with participants
+        try {
+          await setDoc(conversationRef, {
+            participants: [fromUserId, toUserId],
+            lastMessage: lastMessageText,
+            lastMessageTime: serverTimestamp(),
+            createdAt: serverTimestamp()
+          })
+          // Wait a bit to ensure conversation is created before sending message
+          await new Promise(resolve => setTimeout(resolve, 100))
+        } catch (createError) {
+          // If creation fails, check if conversation was created by another request
+          const retryDoc = await getDoc(conversationRef)
+          if (!retryDoc.exists()) {
+            throw createError
+          }
+          conversationExists = true
+        }
+      }
+      
+      if (conversationExists) {
+        // Ensure current user is a participant (fix for old conversations)
+        const conversationData = conversationDoc.exists() ? conversationDoc.data() : (await getDoc(conversationRef)).data()
+        const participants = conversationData?.participants || []
+        
+        // Ensure both users are participants
+        const missingFrom = !participants.includes(fromUserId)
+        const missingTo = !participants.includes(toUserId)
+        
+        if (missingFrom || missingTo) {
+          try {
+            // Use arrayUnion to add missing participants
+            if (missingFrom) {
+              await updateDoc(conversationRef, {
+                participants: arrayUnion(fromUserId)
+              })
+            }
+            if (missingTo) {
+              await updateDoc(conversationRef, {
+                participants: arrayUnion(toUserId)
+              })
+            }
+          } catch (updateError) {
+            // If update fails due to permissions, log but continue
+            console.warn('Could not update participants:', updateError.message)
+            // Still try to send message - rules might allow it
+          }
+        }
+        
         // Update last message
-        await updateDoc(conversationRef, {
-          lastMessage: lastMessageText,
-          lastMessageTime: serverTimestamp()
-        })
+        try {
+          await updateDoc(conversationRef, {
+            lastMessage: lastMessageText,
+            lastMessageTime: serverTimestamp()
+          })
+        } catch (updateError) {
+          // If update fails, log but continue (message can still be sent)
+          console.warn('Could not update last message:', updateError.message)
+        }
       }
 
       // Get from user data using cache
@@ -150,14 +200,57 @@ export const useMessagesStore = defineStore('messages', () => {
         })
       } catch (error) {
         console.error('[MessagesStore] Error adding message to Firestore:', error)
-        // Check if it's a size limit error
-        if (error.message && error.message.includes('size')) {
+        
+        // Check if it's a permission error - try to fix and retry
+        if (error.code === 'permission-denied') {
+          try {
+            // Ensure conversation has correct participants
+            const convDoc = await getDoc(conversationRef)
+            if (convDoc.exists()) {
+              const convData = convDoc.data()
+              const participants = convData?.participants || []
+              
+              // Ensure both users are participants
+              if (!participants.includes(fromUserId) || !participants.includes(toUserId)) {
+                if (!participants.includes(fromUserId)) {
+                  await updateDoc(conversationRef, { participants: arrayUnion(fromUserId) })
+                }
+                if (!participants.includes(toUserId)) {
+                  await updateDoc(conversationRef, { participants: arrayUnion(toUserId) })
+                }
+                
+                // Wait a bit and retry
+                await new Promise(resolve => setTimeout(resolve, 200))
+                await addDoc(messagesRef, messageData)
+                console.log('[MessagesStore] Message sent successfully after retry')
+              } else {
+                // Participants are correct but still permission denied - rules issue
+                return { 
+                  success: false, 
+                  error: 'Không có quyền gửi tin nhắn. Vui lòng kiểm tra Firestore rules hoặc thử lại sau.' 
+                }
+              }
+            } else {
+              return { 
+                success: false, 
+                error: 'Conversation không tồn tại. Vui lòng thử lại.' 
+              }
+            }
+          } catch (retryError) {
+            console.error('[MessagesStore] Retry failed:', retryError)
+            return { 
+              success: false, 
+              error: 'Không thể gửi tin nhắn. Vui lòng kiểm tra quyền truy cập hoặc thử lại sau.' 
+            }
+          }
+        } else if (error.message && error.message.includes('size')) {
           return { 
             success: false, 
             error: 'Tin nhắn quá lớn. Vui lòng gửi ít hình hơn hoặc giảm kích thước hình.' 
           }
+        } else {
+          throw error
         }
-        throw error
       }
 
       // Tạo thông báo cho người nhận (giữ lại logic cũ)
@@ -246,6 +339,19 @@ export const useMessagesStore = defineStore('messages', () => {
       } else {
         messages.value = messagesWithLatestInfo
       }
+    }, (error) => {
+      // Handle permission errors gracefully
+      if (error.code === 'permission-denied') {
+        console.warn(`[MessagesStore] Permission denied for messages in conversation ${conversationId}. You may not have access to this conversation.`)
+        // Set empty messages if permission denied
+        if (callback && typeof callback === 'function') {
+          callback([])
+        } else {
+          messages.value = []
+        }
+      } else {
+        console.error(`[MessagesStore] Error subscribing to messages in conversation ${conversationId}:`, error)
+      }
     })
   }
 
@@ -304,7 +410,12 @@ export const useMessagesStore = defineStore('messages', () => {
           console.log(`[MessagesStore] Updated unreadCount for conversation ${conversationId}: ${unreadSnapshot.size}`)
         }
       }, (error) => {
-        console.error(`Error subscribing to unread messages in conversation ${conversationId}:`, error)
+        // Handle permission errors gracefully
+        if (error.code === 'permission-denied') {
+          console.warn(`[MessagesStore] Permission denied for unread messages in conversation ${conversationId}. This conversation may not exist or you may not have access.`)
+        } else {
+          console.error(`[MessagesStore] Error subscribing to unread messages in conversation ${conversationId}:`, error)
+        }
       })
       
       messageUnsubscribes.set(conversationId, unsubscribe)
@@ -326,9 +437,17 @@ export const useMessagesStore = defineStore('messages', () => {
       for (let i = 0; i < snapshot.docs.length; i++) {
         const docSnap = snapshot.docs[i]
         const data = docSnap.data()
+        // Ensure participants exists and is an array
+        if (!data || !Array.isArray(data.participants)) {
+          console.warn(`[MessagesStore] Conversation ${docSnap.id} has invalid participants field, skipping`)
+          continue
+        }
         const otherUserId = data.participants.find(id => id !== userId)
         
-        if (!otherUserId) continue
+        if (!otherUserId) {
+          console.warn(`[MessagesStore] Conversation ${docSnap.id} does not have other user, skipping`)
+          continue
+        }
         
         const conversationId = docSnap.id
         
@@ -364,6 +483,13 @@ export const useMessagesStore = defineStore('messages', () => {
     }, (error) => {
       console.error('Error in conversations subscription:', error)
       
+      // Handle permission errors
+      if (error.code === 'permission-denied') {
+        console.warn('[MessagesStore] Permission denied for conversations query. User may not have access to any conversations.')
+        conversations.value = []
+        return
+      }
+      
       // If composite index missing, use simple query without orderBy
       if (error.code === 'failed-precondition') {
         console.warn('Composite index missing, using simple query. Click the link in error to create index.')
@@ -381,6 +507,10 @@ export const useMessagesStore = defineStore('messages', () => {
           for (let i = 0; i < snapshot.docs.length; i++) {
             const docSnap = snapshot.docs[i]
             const data = docSnap.data()
+            // Ensure participants exists and is an array
+            if (!data || !Array.isArray(data.participants)) {
+              continue
+            }
             const otherUserId = data.participants.find(id => id !== userId)
             if (!otherUserId) continue
             

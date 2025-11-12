@@ -73,7 +73,7 @@ const loadFriendRequestsCount = async () => {
   if (!authStore.user) return
   
   try {
-    await friendsStore.loadFriendRequests()
+    await friendsStore.loadFriendRequests(authStore.user.uid)
     friendRequestsCount.value = friendsStore.friendRequests.length
   } catch (error) {
     console.error('Error loading friend requests:', error)
