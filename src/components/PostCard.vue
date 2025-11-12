@@ -252,10 +252,10 @@
     </div>
     
     <!-- Comments Section -->
-    <Transition name="slide-down">
+    <Transition name="comments">
       <div v-if="showComments" class="mt-4 pt-4 border-t border-gray-100 space-y-4">
         <!-- Comments List -->
-        <div v-if="post.comments && post.comments.length > 0" class="space-y-4">
+        <TransitionGroup name="list" tag="div" v-if="post.comments && post.comments.length > 0" class="space-y-4">
           <CommentItem
             v-for="comment in post.comments"
             :key="comment.id"
@@ -263,7 +263,7 @@
             :post-id="post.id"
             :post-user-id="post.userId"
           />
-        </div>
+        </TransitionGroup>
         
         <!-- Comment Input -->
         <div class="pt-2">
@@ -626,6 +626,45 @@ onBeforeUnmount(() => {
 .slide-down-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+/* Comments section transition - smooth expand/collapse */
+.comments-enter-active {
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.comments-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.comments-enter-from {
+  opacity: 0;
+  max-height: 0;
+  transform: translateY(-10px);
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.comments-enter-to {
+  opacity: 1;
+  max-height: 2000px;
+  transform: translateY(0);
+}
+
+.comments-leave-from {
+  opacity: 1;
+  max-height: 2000px;
+  transform: translateY(0);
+}
+
+.comments-leave-to {
+  opacity: 0;
+  max-height: 0;
+  transform: translateY(-10px);
+  margin-top: 0;
+  padding-top: 0;
 }
 
 .list-enter-active,

@@ -38,7 +38,11 @@ import {
   ArrowPathIcon,
   PencilIcon,
   EyeIcon,
-  LockClosedIcon
+  LockClosedIcon,
+  ArrowRightOnRectangleIcon,
+  Cog6ToothIcon,
+  MoonIcon,
+  SunIcon
 } from '@heroicons/vue/24/outline'
 import {
   HeartIcon as HeartSolidIcon,
@@ -95,7 +99,11 @@ const iconMap = {
   loading: ArrowPathIcon,
   edit: PencilIcon,
   eye: EyeIcon,
-  lock: LockClosedIcon
+  lock: LockClosedIcon,
+  logout: ArrowRightOnRectangleIcon,
+  settings: Cog6ToothIcon,
+  moon: MoonIcon,
+  sun: SunIcon
 }
 
 const iconComponent = computed(() => {

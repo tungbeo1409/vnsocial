@@ -1,6 +1,7 @@
 <template>
   <div class="relative">
     <button
+      ref="buttonRef"
       @click="toggleDropdown"
       class="p-2.5 rounded-full hover:bg-gray-100 transition-colors text-gray-700 relative"
       title="Thông báo"
@@ -18,6 +19,8 @@
     <Transition name="slide-down">
       <div
         v-if="showDropdown"
+        ref="dropdownRef"
+        @click.stop
         class="notification-dropdown absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-apple-lg border border-gray-100 overflow-hidden z-50 animate-scale-in"
       >
         <!-- Header -->
@@ -118,9 +121,25 @@
                   <p class="text-xs text-gray-500 mt-1">
                     {{ formatTime(notification.createdAt) }}
                   </p>
+                  
+                  <!-- Group Invite Actions -->
+                  <div v-if="notification.type === 'group_invite'" class="flex items-center gap-2 mt-2">
+                    <button
+                      @click.stop="handleAcceptGroupInvite(notification)"
+                      class="px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-colors"
+                    >
+                      Chấp nhận
+                    </button>
+                    <button
+                      @click.stop="handleRejectGroupInvite(notification)"
+                      class="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs rounded-lg hover:bg-gray-300 transition-colors"
+                    >
+                      Từ chối
+                    </button>
+                  </div>
                 </div>
 
-                <div v-if="!notification.read" class="flex-shrink-0 w-2 h-2 bg-system-blue rounded-full mt-2"></div>
+                <div v-if="!notification.read && notification.type !== 'group_invite'" class="flex-shrink-0 w-2 h-2 bg-system-blue rounded-full mt-2"></div>
               </div>
               </div>
             </TransitionGroup>
@@ -197,14 +216,18 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useNotificationsStore } from '@/stores/notifications'
+import { useGroupsStore } from '@/stores/groups'
 import { useAuthStore } from '@/stores/auth'
 import Icon from '@/components/Icon.vue'
 
 const router = useRouter()
 const notificationsStore = useNotificationsStore()
+const groupsStore = useGroupsStore()
 const authStore = useAuthStore()
 
 const showDropdown = ref(false)
+const dropdownRef = ref(null)
+const buttonRef = ref(null)
 const activeTab = ref('other') // 'other' or 'messages'
 
 
@@ -222,6 +245,11 @@ defineExpose({
 })
 
 const handleNotificationClick = async (notification) => {
+  // Don't navigate for group_invite - user needs to accept/reject first
+  if (notification.type === 'group_invite') {
+    return
+  }
+
   // Mark as read
   if (!notification.read) {
     await notificationsStore.markAsRead(notification.id)
@@ -235,6 +263,11 @@ const handleNotificationClick = async (notification) => {
   } else if (notification.type === 'like' || notification.type === 'comment' || notification.type === 'new_post') {
     // Navigate to home page (posts are displayed there)
     router.push('/')
+  } else if (notification.type === 'group_member_joined') {
+    // Navigate to group chat if groupId exists
+    if (notification.groupId) {
+      router.push(`/chat/group/${notification.groupId}`)
+    }
   }
 
   closeDropdown()
@@ -245,13 +278,71 @@ const handleMarkAllRead = async () => {
     // Mark all as read for current tab
     const notificationsToMark = activeTab.value === 'messages' 
       ? notificationsStore.messageNotifications.filter(n => !n.read)
-      : notificationsStore.otherNotifications.filter(n => !n.read)
+      : notificationsStore.otherNotifications.filter(n => !n.read && n.type !== 'group_invite')
     
     await Promise.all(
       notificationsToMark.map(notification => 
         notificationsStore.markAsRead(notification.id)
       )
     )
+  }
+}
+
+const handleAcceptGroupInvite = async (notification) => {
+  if (!authStore.user || !notification.groupId) return
+
+  try {
+    const result = await groupsStore.acceptGroupInvite(authStore.user.uid, notification.groupId)
+    
+    if (result.success) {
+      // Mark notification as read
+      await notificationsStore.markAsRead(notification.id)
+      
+      if (window.showToast) {
+        window.showToast('Đã tham gia nhóm thành công', 'success', '', 2000)
+      }
+      
+      // Navigate to group chat
+      router.push(`/chat/group/${notification.groupId}`)
+      closeDropdown()
+    } else {
+      if (window.showToast) {
+        window.showToast('Không thể tham gia nhóm', 'error', result.error || '', 3000)
+      }
+    }
+  } catch (error) {
+    console.error('Error accepting group invite:', error)
+    if (window.showToast) {
+      window.showToast('Có lỗi xảy ra', 'error', error.message || '', 3000)
+    }
+  }
+}
+
+const handleRejectGroupInvite = async (notification) => {
+  if (!authStore.user || !notification.groupId) return
+
+  try {
+    const result = await groupsStore.rejectGroupInvite(authStore.user.uid, notification.groupId)
+    
+    if (result.success) {
+      // Mark notification as read
+      await notificationsStore.markAsRead(notification.id)
+      
+      if (window.showToast) {
+        window.showToast('Đã từ chối lời mời', 'info', '', 2000)
+      }
+      
+      closeDropdown()
+    } else {
+      if (window.showToast) {
+        window.showToast('Không thể từ chối lời mời', 'error', result.error || '', 3000)
+      }
+    }
+  } catch (error) {
+    console.error('Error rejecting group invite:', error)
+    if (window.showToast) {
+      window.showToast('Có lỗi xảy ra', 'error', error.message || '', 3000)
+    }
   }
 }
 
@@ -276,20 +367,15 @@ const formatTime = (date) => {
   })
 }
 
-// Click outside handler
+// Click outside handler - close dropdown when clicking outside
 const handleClickOutside = (event) => {
-  const dropdown = document.querySelector('.notification-dropdown')
-  const button = event.target.closest('button[title="Thông báo"]')
-  // Also close if clicking on chat button
-  const chatButton = event.target.closest('button[title="Tin nhắn"]')
-  const chatPopup = event.target.closest('.chat-popup-container')
+  if (!showDropdown.value) return
   
-  if (dropdown && !dropdown.contains(event.target) && !button && (chatButton || chatPopup)) {
-    closeDropdown()
-    return
-  }
+  const clickedInsideDropdown = dropdownRef.value?.contains(event.target)
+  const clickedInsideButton = buttonRef.value?.contains(event.target)
   
-  if (dropdown && !dropdown.contains(event.target) && !button?.closest('.relative')) {
+  // Close if clicking outside both dropdown and button
+  if (!clickedInsideDropdown && !clickedInsideButton) {
     closeDropdown()
   }
 }

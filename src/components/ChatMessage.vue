@@ -11,6 +11,7 @@
     </div>
     
     <div
+      ref="messageContainerRef"
       class="flex items-end gap-2 animate-fade-in relative group/message"
       :class="[
         isOwnMessage ? 'flex-row-reverse' : 'flex-row',
@@ -22,6 +23,7 @@
       <Transition name="slide-down">
         <div
           v-if="isOwnMessage && showMenu && props.otherUserId && !message.deleted"
+          ref="menuPopupRef"
           class="absolute z-50 bg-white rounded-md shadow-apple border border-gray-200/60 py-1 min-w-[110px]"
           :class="[
             isOwnMessage ? 'right-0 top-0 mr-12' : 'left-0 top-0 ml-12'
@@ -67,6 +69,7 @@
       <Transition name="slide-down">
         <div
           v-if="!isOwnMessage && showTimePopup && props.otherUserId"
+          ref="timePopupRef"
           class="absolute z-50 bg-white rounded-md shadow-apple border border-gray-200/60 py-1 min-w-[110px]"
           :class="[
             'left-0 top-0 ml-12'
@@ -401,6 +404,9 @@ const openMenuMessageId = inject('openMenuMessageId', null)
 const showMenu = ref(false)
 const showTimePopup = ref(false) // For other user's messages
 const isDeleting = ref(false)
+const menuPopupRef = ref(null)
+const timePopupRef = ref(null)
+const messageContainerRef = ref(null)
 
 // Use inject to get editing state from parent
 const editingMessageId = inject('editingMessageId', null)
@@ -757,14 +763,27 @@ const handleReply = () => {
 
 // Close menu when clicking outside
 const handleClickOutside = (event) => {
-  if (showMenu.value && !event.target.closest('.group\\/message')) {
-    showMenu.value = false
-    if (openMenuMessageId) {
-      openMenuMessageId.value = null
+  // Close menu popup when clicking outside
+  if (showMenu.value) {
+    const clickedInsideMenu = menuPopupRef.value?.contains(event.target)
+    const clickedInsideMessage = messageContainerRef.value?.contains(event.target)
+    
+    if (!clickedInsideMenu && !clickedInsideMessage) {
+      showMenu.value = false
+      if (openMenuMessageId) {
+        openMenuMessageId.value = null
+      }
     }
   }
-  if (showTimePopup.value && !event.target.closest('.group\\/message')) {
-    showTimePopup.value = false
+  
+  // Close time popup when clicking outside
+  if (showTimePopup.value) {
+    const clickedInsidePopup = timePopupRef.value?.contains(event.target)
+    const clickedInsideMessage = messageContainerRef.value?.contains(event.target)
+    
+    if (!clickedInsidePopup && !clickedInsideMessage) {
+      showTimePopup.value = false
+    }
   }
 }
 

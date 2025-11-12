@@ -198,7 +198,7 @@
         </div>
         
         <!-- Reply Input -->
-        <Transition name="slide-down">
+        <Transition name="reply-input">
           <div v-if="showReplyInput" class="mt-2">
             <CommentInput
               :placeholder="`Phản hồi ${comment.userDisplayName}...`"
@@ -710,6 +710,43 @@ onMounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Reply input transition - smooth expand/collapse */
+.reply-input-enter-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.reply-input-leave-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.reply-input-enter-from {
+  opacity: 0;
+  max-height: 0;
+  transform: translateY(-8px);
+  margin-top: 0;
+}
+
+.reply-input-enter-to {
+  opacity: 1;
+  max-height: 200px;
+  transform: translateY(0);
+}
+
+.reply-input-leave-from {
+  opacity: 1;
+  max-height: 200px;
+  transform: translateY(0);
+}
+
+.reply-input-leave-to {
+  opacity: 0;
+  max-height: 0;
+  transform: translateY(-8px);
+  margin-top: 0;
 }
 </style>
 

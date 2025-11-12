@@ -30,7 +30,15 @@
       
       <!-- Right Side: Icons -->
       <div class="flex items-center gap-2 flex-shrink-0">
-        <div v-if="showMessageButton" class="relative">
+        <button
+          v-if="authStore.user"
+          @click="showCreateGroupModal = true"
+          class="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-700"
+          title="Tạo nhóm"
+        >
+          <Icon name="users" :size="22" />
+        </button>
+        <div v-if="showMessageButton" class="relative" ref="chatButtonContainerRef">
           <button
             @click.stop="toggleChatPopup"
             class="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-700 relative"
@@ -46,6 +54,7 @@
           <Transition name="slide-down">
             <div
               v-if="showChatPopup"
+              ref="chatPopupRef"
               @click.stop
               class="chat-popup-container absolute right-0 top-full mt-2 w-96 h-[600px] bg-white rounded-2xl shadow-lg border border-gray-200 flex flex-col overflow-hidden z-50"
             >
@@ -57,26 +66,93 @@
           </Transition>
         </div>
         <NotificationBell ref="notificationBellRef" />
-        <router-link
-          :to="`/profile/${authStore.user?.uid}`"
-          class="flex items-center gap-2 px-2 py-1.5 rounded-full hover:bg-gray-100 transition-colors group"
-        >
-          <img
-            v-if="authStore.userProfile?.avatar"
-            :src="authStore.userProfile.avatar"
-            :alt="authStore.userProfile.displayName"
-            class="w-8 h-8 rounded-full object-cover"
-          />
-          <img
-            v-else
-            src="/user.png"
-            alt="User"
-            class="w-8 h-8 rounded-full object-cover"
-          />
-        </router-link>
+        
+        <!-- User Menu -->
+        <div class="relative" ref="userMenuContainerRef">
+          <button
+            @click.stop="toggleUserMenu"
+            class="flex items-center gap-2 px-2 py-1.5 rounded-full hover:bg-gray-100 transition-colors group"
+            title="Menu người dùng"
+          >
+            <img
+              v-if="authStore.userProfile?.avatar"
+              :src="authStore.userProfile.avatar"
+              :alt="authStore.userProfile.displayName"
+              class="w-8 h-8 rounded-full object-cover ring-2 ring-transparent group-hover:ring-gray-200 transition-all"
+            />
+            <img
+              v-else
+              src="/user.png"
+              alt="User"
+              class="w-8 h-8 rounded-full object-cover ring-2 ring-transparent group-hover:ring-gray-200 transition-all"
+            />
+          </button>
+          
+          <!-- User Menu Dropdown -->
+          <Transition name="slide-down">
+            <div
+              v-if="showUserMenu"
+              @click.stop
+              class="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50"
+            >
+              <!-- Profile Link -->
+              <router-link
+                :to="`/profile/${authStore.user?.uid}`"
+                @click="showUserMenu = false"
+                class="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+              >
+                <Icon name="user" :size="18" />
+                <span>Trang cá nhân</span>
+              </router-link>
+              
+              <div class="border-t border-gray-100 my-1"></div>
+              
+              <!-- Dark Mode Toggle -->
+              <button
+                @click="toggleDarkMode"
+                class="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between gap-3 transition-colors"
+              >
+                <div class="flex items-center gap-3">
+                  <Icon :name="isDarkMode ? 'sun' : 'moon'" :size="18" />
+                  <span>{{ isDarkMode ? 'Chế độ sáng' : 'Chế độ tối' }}</span>
+                </div>
+                <div class="w-10 h-6 rounded-full relative transition-colors duration-200" :class="isDarkMode ? 'bg-blue-500' : 'bg-gray-300'">
+                  <div class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform duration-200" :class="isDarkMode ? 'translate-x-4' : 'translate-x-0'"></div>
+                </div>
+              </button>
+              
+              <!-- Settings (Placeholder) -->
+              <button
+                @click="handleSettings"
+                class="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+              >
+                <Icon name="settings" :size="18" />
+                <span>Cài đặt</span>
+              </button>
+              
+              <div class="border-t border-gray-100 my-1"></div>
+              
+              <!-- Logout -->
+              <button
+                @click="handleLogout"
+                class="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
+              >
+                <Icon name="logout" :size="18" />
+                <span>Đăng xuất</span>
+              </button>
+            </div>
+          </Transition>
+        </div>
       </div>
     </div>
   </header>
+
+  <!-- Create Group Modal -->
+  <CreateGroupModal 
+    :show="showCreateGroupModal" 
+    @close="showCreateGroupModal = false"
+    @created="handleGroupCreated"
+  />
 </template>
 
 <script setup>
@@ -86,6 +162,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useMessagesStore } from '@/stores/messages'
 import NotificationBell from '@/components/NotificationBell.vue'
 import ChatWidgetPopup from '@/components/ChatWidgetPopup.vue'
+import CreateGroupModal from '@/components/CreateGroupModal.vue'
 import Icon from '@/components/Icon.vue'
 import { chatBus } from '@/utils/chatBus'
 
@@ -102,8 +179,19 @@ const showMessageButton = computed(() => {
 const searchQuery = ref('')
 const showSearchSuggestions = ref(false)
 const showChatPopup = ref(false)
+const showUserMenu = ref(false)
+const showCreateGroupModal = ref(false)
 const unreadMessagesCount = ref(0)
 const notificationBellRef = ref(null)
+const isDarkMode = ref(false)
+const chatPopupRef = ref(null)
+const chatButtonContainerRef = ref(null)
+const userMenuContainerRef = ref(null)
+
+const handleGroupCreated = (groupId) => {
+  // Group created successfully, modal will close automatically
+  // Could navigate to group chat here if needed
+}
 
 const toggleChatPopup = (event) => {
   event?.stopPropagation()
@@ -111,7 +199,69 @@ const toggleChatPopup = (event) => {
   if (notificationBellRef.value) {
     notificationBellRef.value.closeDropdown()
   }
+  // Close user menu if open
+  showUserMenu.value = false
   showChatPopup.value = !showChatPopup.value
+}
+
+const toggleUserMenu = (event) => {
+  event?.stopPropagation()
+  // Close chat popup if open
+  showChatPopup.value = false
+  // Close notification popup if open
+  if (notificationBellRef.value) {
+    notificationBellRef.value.closeDropdown()
+  }
+  showUserMenu.value = !showUserMenu.value
+}
+
+const toggleDarkMode = () => {
+  isDarkMode.value = !isDarkMode.value
+  // Toggle dark mode class on html element
+  if (isDarkMode.value) {
+    document.documentElement.classList.add('dark')
+    localStorage.setItem('darkMode', 'true')
+  } else {
+    document.documentElement.classList.remove('dark')
+    localStorage.setItem('darkMode', 'false')
+  }
+}
+
+const handleSettings = () => {
+  showUserMenu.value = false
+  // TODO: Navigate to settings page when implemented
+  if (window.showToast) {
+    window.showToast('Tính năng đang được phát triển', 'info', '', 2000)
+  }
+}
+
+const handleLogout = async () => {
+  showUserMenu.value = false
+  
+  if (window.showConfirm) {
+    const confirmed = await window.showConfirm('Bạn có chắc chắn muốn đăng xuất?', {
+      title: 'Đăng xuất',
+      confirmText: 'Đăng xuất',
+      cancelText: 'Hủy'
+    })
+    if (!confirmed) return
+  }
+  
+  try {
+    // Close chat popup before logout
+    showChatPopup.value = false
+    
+    await authStore.logout()
+    router.push('/login')
+    if (window.showToast) {
+      window.showToast('Đã đăng xuất thành công', 'success', '', 2000)
+    }
+  } catch (error) {
+    console.error('Logout error:', error)
+    if (window.showToast) {
+      window.showToast('Đăng xuất thất bại', 'error', error.message || '', 3000)
+    }
+  }
 }
 
 const handleSearch = () => {
@@ -165,13 +315,24 @@ onUnmounted(() => {
   }
 })
 
-// Close chat popup when clicking outside
+// Close popups when clicking outside
 const handleClickOutside = (event) => {
+  // Close chat popup when clicking outside
   if (showChatPopup.value) {
-    const popup = document.querySelector('.chat-popup-container')
-    const button = event.target.closest('button[title="Tin nhắn"]')
-    if (popup && !popup.contains(event.target) && !button) {
+    const clickedInsidePopup = chatPopupRef.value?.contains(event.target)
+    const clickedInsideButton = chatButtonContainerRef.value?.contains(event.target)
+    
+    if (!clickedInsidePopup && !clickedInsideButton) {
       showChatPopup.value = false
+    }
+  }
+  
+  // Close user menu when clicking outside
+  if (showUserMenu.value) {
+    const clickedInsideMenu = userMenuContainerRef.value?.contains(event.target)
+    
+    if (!clickedInsideMenu) {
+      showUserMenu.value = false
     }
   }
 }
@@ -185,6 +346,13 @@ watch(() => route.path, (newPath) => {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  
+  // Load dark mode preference from localStorage
+  const darkModePreference = localStorage.getItem('darkMode')
+  if (darkModePreference === 'true') {
+    isDarkMode.value = true
+    document.documentElement.classList.add('dark')
+  }
 })
 
 onUnmounted(() => {

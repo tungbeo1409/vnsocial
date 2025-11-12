@@ -80,11 +80,11 @@
       <!-- File Preview -->
       <Transition name="slide-down">
         <div v-if="selectedFiles.length > 0 && !showVoiceRecorder" class="p-2 bg-white border-t border-gray-100">
-          <div class="flex flex-wrap gap-2">
+          <TransitionGroup name="file-item" tag="div" class="flex flex-wrap gap-2">
             <!-- Multiple Files -->
             <div 
               v-for="(file, index) in selectedFiles" 
-              :key="index"
+              :key="`file-${index}-${file.preview?.substring(0, 20) || file.type || Date.now()}`"
               class="relative group"
             >
               <div v-if="file.type === 'image' && file.preview" class="relative">
@@ -138,13 +138,13 @@
                 </button>
               </div>
             </div>
-          </div>
+          </TransitionGroup>
         </div>
       </Transition>
 
       <!-- Voice Recorder -->
       <Transition name="slide-down">
-        <div v-if="showVoiceRecorder" class="p-2 bg-white border-t border-gray-100 flex justify-end">
+        <div v-if="showVoiceRecorder" class="p-2 bg-white border-t border-gray-100 flex justify-end" @click.stop>
           <VoiceRecorder @send="handleSendVoice" @cancel="showVoiceRecorder = false" />
         </div>
       </Transition>
@@ -235,6 +235,7 @@
               <Icon name="attachment" :size="16" class="text-gray-600" />
             </label>
             <button
+              type="button"
               @click="showVoiceRecorder = !showVoiceRecorder"
               class="p-1.5 rounded hover:bg-gray-100 transition-colors"
               :class="{ 'bg-gray-100': showVoiceRecorder }"

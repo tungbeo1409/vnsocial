@@ -25,25 +25,27 @@
       <!-- Multiple Images Preview Grid -->
       <Transition name="slide-down">
         <div v-if="images.length > 0" class="grid grid-cols-3 gap-2">
-          <div
-            v-for="(image, index) in images"
-            :key="index"
-            class="relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100 group"
-          >
-            <img
-              :src="image.preview"
-              :alt="`Image ${index + 1}`"
-              class="w-full h-full object-cover"
-            />
-            <button
-              type="button"
-              @click="removeImage(index)"
-              class="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full w-6 h-6 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
-              title="Xóa ảnh"
+          <TransitionGroup name="image-item" tag="div" class="contents">
+            <div
+              v-for="(image, index) in images"
+              :key="`image-${index}-${image.preview?.substring(0, 20)}`"
+              class="relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100 group"
             >
-              <Icon name="close" :size="12" />
-            </button>
-          </div>
+              <img
+                :src="image.preview"
+                :alt="`Image ${index + 1}`"
+                class="w-full h-full object-cover"
+              />
+              <button
+                type="button"
+                @click="removeImage(index)"
+                class="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full w-6 h-6 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                title="Xóa ảnh"
+              >
+                <Icon name="close" :size="12" />
+              </button>
+            </div>
+          </TransitionGroup>
         </div>
       </Transition>
 

@@ -4,7 +4,8 @@
     <div v-if="recording" class="recording-state">
       <div class="flex items-center gap-2">
         <button
-          @click="stopRecording"
+          type="button"
+          @click.stop="stopRecording"
           class="record-button recording"
           title="Dừng ghi âm"
         >
@@ -27,7 +28,8 @@
     <div v-else-if="audioBlob" class="preview-state">
       <div class="flex items-center gap-2">
         <button
-          @click="playPreview"
+          type="button"
+          @click.stop="playPreview"
           :disabled="playing"
           class="play-button"
           :class="{ 'playing': playing }"
@@ -53,7 +55,8 @@
 
         <div class="flex items-center gap-1.5">
           <button
-            @click="sendVoice"
+            type="button"
+            @click.stop="sendVoice"
             :disabled="sending"
             class="send-button"
             title="Gửi"
@@ -62,7 +65,8 @@
             <Icon v-else name="send" :size="12" />
           </button>
           <button
-            @click="cancelVoice"
+            type="button"
+            @click.stop="cancelVoice"
             class="cancel-button"
             title="Hủy"
           >
@@ -77,11 +81,12 @@
     <!-- Idle State -->
     <div v-else class="idle-state">
       <button
-        @mousedown="startRecording"
-        @mouseup="stopRecording"
-        @mouseleave="stopRecording"
-        @touchstart="startRecording"
-        @touchend="stopRecording"
+        type="button"
+        @mousedown.prevent="startRecording"
+        @mouseup.prevent="stopRecording"
+        @mouseleave.prevent="stopRecording"
+        @touchstart.prevent="startRecording"
+        @touchend.prevent="stopRecording"
         class="record-button idle"
         title="Giữ để ghi âm"
       >

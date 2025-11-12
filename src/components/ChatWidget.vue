@@ -158,11 +158,11 @@
           <!-- File Preview -->
           <Transition name="slide-down">
             <div v-if="selectedFiles.length > 0 && !showVoiceRecorder" class="p-2 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-              <div class="flex flex-wrap gap-2">
+              <TransitionGroup name="file-item" tag="div" class="flex flex-wrap gap-2">
                 <!-- Multiple Files -->
                 <div 
                   v-for="(file, index) in selectedFiles" 
-                  :key="index"
+                  :key="`file-${index}-${file.preview?.substring(0, 20) || file.type || Date.now()}`"
                   class="relative group"
                 >
                   <div v-if="file.type === 'image' && file.preview" class="relative">
@@ -216,7 +216,7 @@
                     </button>
                   </div>
                 </div>
-              </div>
+              </TransitionGroup>
             </div>
           </Transition>
 

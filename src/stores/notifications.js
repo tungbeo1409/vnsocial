@@ -53,6 +53,8 @@ export const useNotificationsStore = defineStore('notifications', () => {
         fromUserAvatar: data.fromUserAvatar || '',
         postId: data.postId || null,
         message: data.message || null,
+        groupId: data.groupId || null,
+        groupName: data.groupName || null,
         read: false,
         createdAt: serverTimestamp()
       })
@@ -166,7 +168,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
       message: `${notification.fromUserName} đã gửi tin nhắn: ${notification.message || ''}`,
       like: `${notification.fromUserName} đã thích bài viết của bạn`,
       comment: `${notification.fromUserName} đã bình luận: ${notification.message || ''}`,
-      new_post: `${notification.fromUserName} đã đăng bài viết mới`
+      new_post: `${notification.fromUserName} đã đăng bài viết mới`,
+      group_invite: `${notification.fromUserName} đã mời bạn tham gia nhóm "${notification.groupName || 'Nhóm chat'}"`,
+      group_member_joined: `${notification.fromUserName} đã vào nhóm "${notification.groupName || 'Nhóm chat'}"`
     }
     return messages[notification.type] || 'Bạn có thông báo mới'
   }
@@ -179,7 +183,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
       message: 'message',
       like: 'heart',
       comment: 'message',
-      new_post: 'home'
+      new_post: 'home',
+      group_invite: 'users',
+      group_member_joined: 'check'
     }
     return icons[type] || 'bell'
   }

@@ -130,6 +130,27 @@ watch(() => route.path, (newPath) => {
   }
 }, { immediate: true })
 
+// Watch auth state - close all chats when user logs out
+watch(() => authStore.user, (newUser, oldUser) => {
+  if (!newUser && oldUser) {
+    // User logged out - close all floating chats
+    closeAllFloatingChats()
+    // Unsubscribe from messages
+    if (unreadMessagesUnsubscribe) {
+      unreadMessagesUnsubscribe()
+      unreadMessagesUnsubscribe = null
+    }
+  } else if (newUser && !oldUser) {
+    // User logged in - subscribe to messages
+    if (newUser) {
+      unreadMessagesUnsubscribe = messagesStore.subscribeToUnreadMessages(
+        newUser.uid,
+        handleNewMessage
+      )
+    }
+  }
+}, { immediate: false })
+
 // Listen to chat bus for opening chats
 // Disable right-click context menu on entire app
 const disableContextMenu = (e) => {
