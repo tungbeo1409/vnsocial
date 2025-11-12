@@ -117,28 +117,42 @@
           <!-- Messages -->
           <div 
             ref="messagesContainer"
-            class="flex-1 overflow-y-auto p-4 scrollbar-hide bg-gray-50"
+            class="flex-1 overflow-y-auto p-4 scrollbar-hide bg-gray-100 relative"
             style="min-height: 0;"
           >
-            <div v-if="messagesStore.loading && messagesStore.messages.length === 0" class="text-center py-8">
-              <div class="inline-block w-6 h-6 border-2 border-system-blue border-t-transparent rounded-full animate-spin mb-2"></div>
-              <p class="text-xs text-gray-500">Đang tải...</p>
-            </div>
+            <!-- Overlay when editing message -->
+            <Transition name="fade">
+              <div
+                v-if="editingMessageId"
+                class="absolute inset-0 bg-black/40 z-40 rounded-2xl"
+                @click="cancelEditing"
+              ></div>
+            </Transition>
+            
+            <div class="relative z-50">
+              <div v-if="messagesStore.loading && messagesStore.messages.length === 0" class="text-center py-8">
+                <div class="inline-block w-6 h-6 border-2 border-system-blue border-t-transparent rounded-full animate-spin mb-2"></div>
+                <p class="text-xs text-gray-500">Đang tải...</p>
+              </div>
 
-            <div v-else-if="messagesStore.messages.length === 0" class="text-center py-8">
-              <div class="text-4xl mb-2">💭</div>
-              <p class="text-xs text-gray-500">Chưa có tin nhắn nào</p>
-            </div>
+              <div v-else-if="messagesStore.messages.length === 0" class="text-center py-8">
+                <div class="text-4xl mb-2">💭</div>
+                <p class="text-xs text-gray-500">Chưa có tin nhắn nào</p>
+              </div>
 
-            <TransitionGroup v-else name="list" tag="div">
-              <ChatMessage
-                v-for="(message, index) in messagesStore.messages"
-                :key="message.id"
-                :message="message"
-                :previous-message="index > 0 ? messagesStore.messages[index - 1] : null"
-                :next-message="index < messagesStore.messages.length - 1 ? messagesStore.messages[index + 1] : null"
-              />
-            </TransitionGroup>
+              <TransitionGroup v-else name="list" tag="div">
+                <ChatMessage
+                  v-for="(message, index) in messagesStore.messages"
+                  :key="message.id"
+                  :message="message"
+                  :previous-message="index > 0 ? messagesStore.messages[index - 1] : null"
+                  :next-message="index < messagesStore.messages.length - 1 ? messagesStore.messages[index + 1] : null"
+                  :other-user-id="currentChatUserId"
+                  :all-messages="messagesStore.messages"
+                  :class="editingMessageId && editingMessageId !== message.id ? 'opacity-30' : ''"
+                />
+              </TransitionGroup>
+            </div>
           </div>
 
           <!-- File Preview -->
@@ -208,70 +222,104 @@
 
           <!-- Voice Recorder -->
           <Transition name="slide-down">
-            <div v-if="showVoiceRecorder" class="p-3 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+            <div v-if="showVoiceRecorder" class="p-3 border-t border-gray-100 bg-gray-50 flex-shrink-0 flex justify-end">
               <VoiceRecorder @send="handleSendVoice" @cancel="showVoiceRecorder = false" />
             </div>
           </Transition>
 
           <!-- Message Input -->
-          <div class="p-3 border-t border-gray-100 bg-white flex-shrink-0">
-            <div class="flex items-center gap-2 mb-2">
-              <label class="cursor-pointer p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Chọn ảnh">
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  @change="handleFileSelect($event, 'image')"
-                  class="hidden"
-                />
-                <span class="text-lg">📷</span>
-              </label>
-              <label class="cursor-pointer p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Chọn video">
-                <input
-                  type="file"
-                  accept="video/*"
-                  @change="handleFileSelect($event, 'video')"
-                  class="hidden"
-                />
-                <span class="text-lg">🎥</span>
-              </label>
-              <label class="cursor-pointer p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Chọn file">
-                <input
-                  type="file"
-                  @change="handleFileSelect($event, 'file')"
-                  class="hidden"
-                />
-                <span class="text-lg">📎</span>
-              </label>
-              <button
-                @click="showVoiceRecorder = !showVoiceRecorder"
-                class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-                :class="{ 'bg-gray-200': showVoiceRecorder }"
-                title="Ghi âm"
-              >
-                <span class="text-lg">🎤</span>
-              </button>
+          <div v-if="!showVoiceRecorder" class="p-3 border-t border-gray-100 bg-white flex-shrink-0 relative" :class="editingMessageId ? 'z-50' : ''">
+            <!-- Editing Mode -->
+            <div v-if="editingMessageId" class="space-y-2">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-xs text-gray-500 font-medium">Đang sửa tin nhắn</span>
+              </div>
+              <div class="flex gap-2 items-end">
+                <textarea
+                  v-model="editingContent"
+                  class="flex-1 px-3 py-2 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-gray-300 text-sm resize-none transition-all duration-200"
+                  rows="3"
+                  @keydown.ctrl.enter="handleSaveEdit"
+                  @keydown.esc="cancelEditing"
+                  autofocus
+                ></textarea>
+                <button
+                  @click="cancelEditing"
+                  class="p-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                  title="Hủy"
+                >
+                  <Icon name="close" :size="16" />
+                </button>
+                <button
+                  @click="handleSaveEdit"
+                  class="p-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors duration-200"
+                  title="Gửi"
+                >
+                  <Icon name="send" :size="16" />
+                </button>
+              </div>
             </div>
-            <form @submit.prevent="handleSendMessage" class="flex gap-2">
-              <input
-                v-model="messageContent"
-                type="text"
-                placeholder="Nhập tin nhắn..."
-                class="input-field flex-1 text-sm py-2"
-                :disabled="messagesStore.loading || uploading"
-              />
-              <button
-                type="submit"
-                :disabled="(!messageContent.trim() && selectedFiles.length === 0) || messagesStore.loading || uploading"
-                class="btn-primary px-4 py-2 text-sm"
-                :class="{ 'opacity-50 cursor-not-allowed': (!messageContent.trim() && selectedFiles.length === 0) || messagesStore.loading || uploading }"
-              >
-                <span v-if="messagesStore.loading || uploading" class="flex items-center gap-1">
-                  <span class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                </span>
-                <span v-else>Gửi</span>
-              </button>
-            </form>
+            
+            <!-- Normal Input Mode -->
+            <div v-else>
+              <div class="flex items-center gap-2 mb-2">
+                <label class="cursor-pointer p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Chọn ảnh">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    @change="handleFileSelect($event, 'image')"
+                    class="hidden"
+                  />
+                  <span class="text-lg">📷</span>
+                </label>
+                <label class="cursor-pointer p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Chọn video">
+                  <input
+                    type="file"
+                    accept="video/*"
+                    @change="handleFileSelect($event, 'video')"
+                    class="hidden"
+                  />
+                  <span class="text-lg">🎥</span>
+                </label>
+                <label class="cursor-pointer p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Chọn file">
+                  <input
+                    type="file"
+                    @change="handleFileSelect($event, 'file')"
+                    class="hidden"
+                  />
+                  <span class="text-lg">📎</span>
+                </label>
+                <button
+                  @click="showVoiceRecorder = !showVoiceRecorder"
+                  class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                  :class="{ 'bg-gray-200': showVoiceRecorder }"
+                  title="Ghi âm"
+                >
+                  <span class="text-lg">🎤</span>
+                </button>
+              </div>
+              <form @submit.prevent="handleSendMessage" class="flex gap-2">
+                <input
+                  v-model="messageContent"
+                  type="text"
+                  placeholder="Nhập tin nhắn..."
+                  class="input-field flex-1 text-sm py-2"
+                  :disabled="messagesStore.loading || uploading"
+                />
+                <button
+                  type="submit"
+                  :disabled="(!messageContent.trim() && selectedFiles.length === 0) || messagesStore.loading || uploading"
+                  class="btn-primary px-4 py-2 text-sm"
+                  :class="{ 'opacity-50 cursor-not-allowed': (!messageContent.trim() && selectedFiles.length === 0) || messagesStore.loading || uploading }"
+                >
+                  <span v-if="messagesStore.loading || uploading" class="flex items-center gap-1">
+                    <span class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  </span>
+                  <span v-else>Gửi</span>
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </div>
@@ -280,7 +328,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, provide, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useMessagesStore } from '@/stores/messages'
 import { useFriendsStore } from '@/stores/friends'
@@ -292,6 +340,35 @@ import ChatMessage from '@/components/ChatMessage.vue'
 const authStore = useAuthStore()
 const messagesStore = useMessagesStore()
 const friendsStore = useFriendsStore()
+
+// Provide openMenuMessageId to manage which message menu is open
+const openMenuMessageId = ref(null)
+provide('openMenuMessageId', openMenuMessageId)
+
+// Provide editingMessageId and editingContent for message editing
+const editingMessageId = ref(null)
+const editingContent = ref('')
+provide('editingMessageId', editingMessageId)
+provide('editingContent', editingContent)
+provide('setEditingMessage', (messageId, content) => {
+  editingMessageId.value = messageId
+  editingContent.value = content
+})
+const cancelEditing = () => {
+  editingMessageId.value = null
+  editingContent.value = ''
+}
+provide('cancelEditing', cancelEditing)
+
+// Provide replyingToMessage for message reply
+const replyingToMessage = ref(null)
+provide('replyingToMessage', replyingToMessage)
+provide('setReplyingToMessage', (message) => {
+  replyingToMessage.value = message
+})
+provide('cancelReplying', () => {
+  replyingToMessage.value = null
+})
 
 const isOpen = ref(false)
 const viewMode = ref('list') // 'list' or 'chat'
@@ -459,10 +536,55 @@ const removeFile = (index) => {
   selectedFiles.value.splice(index, 1)
 }
 
-const handleSendVoice = (voiceData) => {
-  // Clear other files and add voice recording
-  selectedFiles.value = [voiceData]
+const handleSendVoice = async (voiceData) => {
+  // Send voice message immediately
+  if (!currentChatUserId.value) return
+  
   showVoiceRecorder.value = false
+  
+  try {
+    const result = await messagesStore.sendMessage(
+      authStore.user.uid,
+      currentChatUserId.value,
+      '', // No text content for voice
+      voiceData,
+      null // No replyTo for voice messages
+    )
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Gửi tin nhắn thất bại')
+    }
+    
+    // Reopen chat to show new message
+    // The chat will auto-update via subscription
+  } catch (error) {
+    alert(error.message || 'Gửi tin nhắn thất bại')
+    // Reopen voice recorder on error
+    showVoiceRecorder.value = true
+  }
+}
+
+const handleSaveEdit = async () => {
+  if (!editingMessageId.value || !editingContent.value.trim() || !currentChatUserId.value) {
+    cancelEditing()
+    return
+  }
+  
+  const result = await messagesStore.editMessage(
+    authStore.user.uid,
+    currentChatUserId.value,
+    editingMessageId.value,
+    editingContent.value.trim()
+  )
+  
+  if (result.success) {
+    cancelEditing()
+    if (window.showToast) {
+      window.showToast('Đã sửa tin nhắn', 'success', '', 2000)
+    }
+  } else {
+    alert(result.error || 'Không thể sửa tin nhắn')
+  }
 }
 
 const handleSendMessage = async () => {
@@ -470,30 +592,85 @@ const handleSendMessage = async () => {
 
   const content = messageContent.value
   const filesToSend = [...selectedFiles.value]
+  const replyToId = replyingToMessage.value?.id || null
 
   // Clear inputs
   messageContent.value = ''
   const previousFiles = [...selectedFiles.value]
   selectedFiles.value = []
+  replyingToMessage.value = null // Clear reply after sending
 
   try {
-    // If multiple images, send each as a separate message
+    // If multiple images, group them into messages of 9 images each
     if (filesToSend.length > 1 && filesToSend.every(f => f.type === 'image')) {
-      // Send all images
-      for (let i = 0; i < filesToSend.length; i++) {
-        const fileData = filesToSend[i]
-        const messageText = i === 0 ? content : '' // Only include text with first image
+      // If there's text content, send it as a separate message first
+      if (content && content.trim()) {
+        const textResult = await messagesStore.sendMessage(
+          authStore.user.uid,
+          currentChatUserId.value,
+          content,
+          null, // No file, just text
+          replyToId // Pass replyToId only for the first message
+        )
         
+        if (!textResult.success) {
+          throw new Error(textResult.error || 'Gửi tin nhắn thất bại')
+        }
+      }
+      
+      // Group images into batches of 6
+      const batchSize = 6
+      for (let i = 0; i < filesToSend.length; i += batchSize) {
+        const batch = filesToSend.slice(i, i + batchSize)
+        const images = batch.map(f => f.data) // Extract base64 data
+        
+        const fileData = {
+          type: 'images',
+          images: images,
+          count: images.length
+        }
+        
+        // Send images without text (no replyTo for image-only messages)
         const result = await messagesStore.sendMessage(
           authStore.user.uid,
           currentChatUserId.value,
-          messageText,
-          fileData
+          '', // No text, just images
+          fileData,
+          null // No replyTo for image-only messages
         )
         
         if (!result.success) {
           throw new Error(result.error || 'Gửi tin nhắn thất bại')
         }
+      }
+    } else if (filesToSend.length === 1 && filesToSend[0].type === 'image') {
+      // Single image - also separate text and image
+      if (content && content.trim()) {
+        const textResult = await messagesStore.sendMessage(
+          authStore.user.uid,
+          currentChatUserId.value,
+          content,
+          null, // No file, just text
+          replyToId // Pass replyToId only for the first message
+        )
+        
+        if (!textResult.success) {
+          throw new Error(textResult.error || 'Gửi tin nhắn thất bại')
+        }
+      }
+      
+      // Send single image without text
+      const fileData = filesToSend[0]
+      const result = await messagesStore.sendMessage(
+        authStore.user.uid,
+        currentChatUserId.value,
+        '', // No text, just image
+        fileData,
+        null // No replyTo for image-only messages
+      )
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Gửi tin nhắn thất bại')
       }
     } else {
       // Single file or non-image file
@@ -502,7 +679,8 @@ const handleSendMessage = async () => {
         authStore.user.uid,
         currentChatUserId.value,
         content,
-        fileData
+        fileData,
+        replyToId
       )
 
       if (!result.success) {
@@ -574,6 +752,16 @@ watch(() => viewMode.value, (newMode) => {
 .list-leave-to {
   opacity: 0;
   transform: translateY(-5px);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
 

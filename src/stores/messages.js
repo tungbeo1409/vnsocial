@@ -12,6 +12,7 @@ import {
   getDoc,
   getDocs,
   updateDoc,
+  deleteDoc,
   setDoc,
   writeBatch,
   serverTimestamp
@@ -33,7 +34,7 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   // Send a message - ĐỜN GIẢN: chỉ tạo message, không có unreadCount phức tạp
-  const sendMessage = async (fromUserId, toUserId, content, fileData = null) => {
+  const sendMessage = async (fromUserId, toUserId, content, fileData = null, replyToMessageId = null) => {
     // Must have either content or fileData
     if ((!content || !content.trim()) && !fileData) {
       return { success: false, error: 'Tin nhắn hoặc file không được để trống' }
@@ -47,8 +48,13 @@ export const useMessagesStore = defineStore('messages', () => {
       // Prepare last message text
       let lastMessageText = content?.trim() || ''
       if (fileData) {
-        if (fileData.type === 'image') lastMessageText = '📷 Ảnh'
-        else if (fileData.type === 'video') lastMessageText = '🎥 Video'
+        if (fileData.type === 'images' && fileData.images && Array.isArray(fileData.images)) {
+          // Multiple images
+          const count = fileData.images.length
+          lastMessageText = count === 1 ? '📷 Ảnh' : `📷 ${count} ảnh`
+        } else if (fileData.type === 'image') {
+          lastMessageText = '📷 Ảnh'
+        } else if (fileData.type === 'video') lastMessageText = '🎥 Video'
         else if (fileData.type === 'audio') lastMessageText = '🎤 Ghi âm'
         else if (fileData.type === 'file') lastMessageText = `📎 ${fileData.filename || 'File'}`
         if (content?.trim()) lastMessageText = `${lastMessageText}: ${content.trim()}`
@@ -86,21 +92,72 @@ export const useMessagesStore = defineStore('messages', () => {
         createdAt: serverTimestamp()
       }
 
+      // Add replyTo if replying to a message
+      if (replyToMessageId) {
+        messageData.replyTo = replyToMessageId
+      }
+
       // Add file data if exists
       if (fileData) {
-        messageData.fileType = fileData.type
-        messageData.fileData = fileData.data
-        messageData.fileName = fileData.filename || null
-        messageData.fileSize = fileData.size || null
-        messageData.mimeType = fileData.mimeType || null
-        if (fileData.duration) {
-          messageData.duration = fileData.duration
+        if (fileData.type === 'images' && fileData.images && Array.isArray(fileData.images)) {
+          // Multiple images
+          messageData.fileType = 'images'
+          messageData.images = fileData.images // Array of base64 images
+          messageData.imageCount = fileData.images.length
+          
+          // Log để debug
+          console.log('[MessagesStore] Sending multiple images:', {
+            count: fileData.images.length,
+            firstImageSize: fileData.images[0]?.length || 0,
+            totalSize: fileData.images.reduce((sum, img) => sum + (img?.length || 0), 0)
+          })
+        } else {
+          // Single file
+          messageData.fileType = fileData.type
+          messageData.fileData = fileData.data
+          messageData.fileName = fileData.filename || null
+          messageData.fileSize = fileData.size || null
+          messageData.mimeType = fileData.mimeType || null
+          if (fileData.duration) {
+            messageData.duration = fileData.duration
+          }
         }
       }
 
       // Add message to messages subcollection
       const messagesRef = collection(db, 'conversations', conversationId, 'messages')
-      await addDoc(messagesRef, messageData)
+      
+      // Check total size of message data (Firestore limit is ~1MB per document)
+      const messageDataSize = JSON.stringify(messageData).length
+      if (messageDataSize > 900 * 1024) { // 900KB to be safe
+        console.warn('[MessagesStore] Message data size is large:', messageDataSize, 'bytes')
+        // If too large, try to reduce image quality or split
+        if (fileData && fileData.type === 'images' && fileData.images) {
+          return { 
+            success: false, 
+            error: `Tin nhắn quá lớn (${Math.round(messageDataSize / 1024)}KB). Vui lòng gửi ít hình hơn hoặc giảm kích thước hình.` 
+          }
+        }
+      }
+      
+      try {
+        await addDoc(messagesRef, messageData)
+        console.log('[MessagesStore] Message sent successfully:', {
+          fileType: messageData.fileType,
+          hasImages: !!messageData.images,
+          imagesCount: messageData.images?.length || 0
+        })
+      } catch (error) {
+        console.error('[MessagesStore] Error adding message to Firestore:', error)
+        // Check if it's a size limit error
+        if (error.message && error.message.includes('size')) {
+          return { 
+            success: false, 
+            error: 'Tin nhắn quá lớn. Vui lòng gửi ít hình hơn hoặc giảm kích thước hình.' 
+          }
+        }
+        throw error
+      }
 
       // Tạo thông báo cho người nhận (giữ lại logic cũ)
       try {
@@ -126,18 +183,37 @@ export const useMessagesStore = defineStore('messages', () => {
 
   // Subscribe to messages in a conversation
   // Load messages ordered by creation time (ascending) - newest at bottom for easy reading
-  const subscribeToMessages = (userId1, userId2) => {
+  // If callback is provided, use it instead of updating messages.value (for multiple chat windows)
+  const subscribeToMessages = (userId1, userId2, callback = null) => {
     const conversationId = getConversationId(userId1, userId2)
     const messagesRef = collection(db, 'conversations', conversationId, 'messages')
     // Query all messages, ordered by creation time ascending (oldest first, newest last)
     const q = query(messagesRef, orderBy('createdAt', 'asc'))
 
     return onSnapshot(q, async (snapshot) => {
-      const messagesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.() || new Date()
-      }))
+      const messagesData = snapshot.docs.map(doc => {
+        const data = doc.data()
+        const message = {
+          id: doc.id,
+          ...data,
+          // Ensure images array is preserved if it exists
+          images: data.images && Array.isArray(data.images) ? data.images : (data.images ? [data.images] : null),
+          createdAt: data.createdAt?.toDate?.() || new Date()
+        }
+        
+        // Log để debug multiple images
+        if (message.fileType === 'images' && message.images) {
+          console.log('[MessagesStore] Loaded message with images:', {
+            messageId: message.id,
+            fileType: message.fileType,
+            imagesCount: message.images?.length || 0,
+            hasImages: !!message.images,
+            isArray: Array.isArray(message.images)
+          })
+        }
+        
+        return message
+      })
       
       // Always load latest user info for all messages
       const messagesWithLatestInfo = await Promise.all(
@@ -159,7 +235,13 @@ export const useMessagesStore = defineStore('messages', () => {
         })
       )
       
-      messages.value = messagesWithLatestInfo
+      // If callback provided, use it (for multiple chat windows)
+      // Otherwise, update shared messages.value (for single chat view)
+      if (callback && typeof callback === 'function') {
+        callback(messagesWithLatestInfo)
+      } else {
+        messages.value = messagesWithLatestInfo
+      }
     })
   }
 
@@ -405,6 +487,153 @@ export const useMessagesStore = defineStore('messages', () => {
     }
   }
 
+  // Delete a message
+  const deleteMessage = async (userId1, userId2, messageId) => {
+    try {
+      const conversationId = getConversationId(userId1, userId2)
+      const messageRef = doc(db, 'conversations', conversationId, 'messages', messageId)
+      
+      // Check if message exists and belongs to current user
+      const messageDoc = await getDoc(messageRef)
+      if (!messageDoc.exists()) {
+        return { success: false, error: 'Tin nhắn không tồn tại' }
+      }
+      
+      const messageData = messageDoc.data()
+      const currentUserId = userId1 // Assuming userId1 is the current user
+      
+      // Only allow deleting own messages
+      if (messageData.fromUserId !== currentUserId) {
+        return { success: false, error: 'Bạn chỉ có thể xóa tin nhắn của mình' }
+      }
+      
+      // Mark message as deleted instead of deleting it
+      await updateDoc(messageRef, {
+        deleted: true,
+        deletedAt: serverTimestamp(),
+        content: '', // Clear content
+        fileType: null,
+        fileData: null,
+        images: null
+      })
+      
+      // Update last message in conversation if this was the last message
+      const conversationRef = doc(db, 'conversations', conversationId)
+      const conversationDoc = await getDoc(conversationRef)
+      
+      if (conversationDoc.exists()) {
+        const convData = conversationDoc.data()
+        // If deleted message was the last message, update conversation
+        if (convData.lastMessageId === messageId) {
+          // Get the new last message
+          const messagesRef = collection(db, 'conversations', conversationId, 'messages')
+          const q = query(messagesRef, orderBy('createdAt', 'desc'), limit(1))
+          const snapshot = await getDocs(q)
+          
+          if (snapshot.size > 0) {
+            const lastMsg = snapshot.docs[0]
+            const lastMsgData = lastMsg.data()
+            await updateDoc(conversationRef, {
+              lastMessage: lastMsgData.content || (lastMsgData.fileType === 'images' ? `📷 ${lastMsgData.imageCount || lastMsgData.images?.length || 0} ảnh` : 
+                lastMsgData.fileType === 'image' ? '📷 Ảnh' :
+                lastMsgData.fileType === 'video' ? '🎥 Video' :
+                lastMsgData.fileType === 'audio' ? '🎤 Ghi âm' :
+                lastMsgData.fileType === 'file' ? `📎 ${lastMsgData.fileName || 'File'}` : ''),
+              lastMessageId: lastMsg.id,
+              lastMessageTime: lastMsgData.createdAt
+            })
+          } else {
+            // No messages left, clear conversation
+            await updateDoc(conversationRef, {
+              lastMessage: '',
+              lastMessageId: null,
+              lastMessageTime: null
+            })
+          }
+        }
+      }
+      
+      return { success: true }
+    } catch (error) {
+      console.error('Error deleting message:', error)
+      
+      // Check if it's a permissions error
+      if (error.code === 'permission-denied' || error.message.includes('permissions')) {
+        return { 
+          success: false, 
+          error: 'Không có quyền xóa tin nhắn. Vui lòng cập nhật Firestore Rules để cho phép xóa tin nhắn.' 
+        }
+      }
+      
+      return { success: false, error: error.message || 'Không thể xóa tin nhắn' }
+    }
+  }
+
+  // Edit a message (only text content)
+  const editMessage = async (userId1, userId2, messageId, newContent) => {
+    try {
+      if (!newContent || !newContent.trim()) {
+        return { success: false, error: 'Nội dung tin nhắn không được để trống' }
+      }
+      
+      const conversationId = getConversationId(userId1, userId2)
+      const messageRef = doc(db, 'conversations', conversationId, 'messages', messageId)
+      
+      // Check if message exists and belongs to current user
+      const messageDoc = await getDoc(messageRef)
+      if (!messageDoc.exists()) {
+        return { success: false, error: 'Tin nhắn không tồn tại' }
+      }
+      
+      const messageData = messageDoc.data()
+      const currentUserId = userId1 // Assuming userId1 is the current user
+      
+      // Only allow editing own messages
+      if (messageData.fromUserId !== currentUserId) {
+        return { success: false, error: 'Bạn chỉ có thể sửa tin nhắn của mình' }
+      }
+      
+      // Only allow editing messages with text content
+      if (!messageData.content || !messageData.content.trim()) {
+        return { success: false, error: 'Chỉ có thể sửa tin nhắn có văn bản' }
+      }
+      
+      // Update the message
+      await updateDoc(messageRef, {
+        content: newContent.trim(),
+        edited: true,
+        editedAt: serverTimestamp()
+      })
+      
+      // Update last message in conversation if this was the last message
+      const conversationRef = doc(db, 'conversations', conversationId)
+      const conversationDoc = await getDoc(conversationRef)
+      
+      if (conversationDoc.exists()) {
+        const convData = conversationDoc.data()
+        if (convData.lastMessageId === messageId) {
+          await updateDoc(conversationRef, {
+            lastMessage: newContent.trim()
+          })
+        }
+      }
+      
+      return { success: true }
+    } catch (error) {
+      console.error('Error editing message:', error)
+      
+      // Check if it's a permissions error
+      if (error.code === 'permission-denied' || error.message.includes('permissions')) {
+        return { 
+          success: false, 
+          error: 'Không có quyền sửa tin nhắn. Vui lòng cập nhật Firestore Rules để cho phép sửa tin nhắn.' 
+        }
+      }
+      
+      return { success: false, error: error.message || 'Không thể sửa tin nhắn' }
+    }
+  }
+
   // Tính tổng số tin nhắn chưa đọc từ tất cả conversations - ĐỜN GIẢN: query trực tiếp từ messages
   const updateUnreadCount = async (userId) => {
     try {
@@ -546,6 +775,8 @@ export const useMessagesStore = defineStore('messages', () => {
     subscribeToMessages,
     subscribeToConversations,
     markAsRead,
+    deleteMessage,
+    editMessage,
     updateUnreadCount,
     subscribeToUnreadMessages,
     getConversationId

@@ -506,7 +506,18 @@ const handleFriendAction = async (event) => {
         friendshipStatus.value = 'none'
       }
     } else if (status === 'friends') {
-      if (confirm('Bạn có chắc muốn hủy kết bạn?')) {
+      let confirmed = false
+      if (window.showConfirm) {
+        confirmed = await window.showConfirm('Bạn có chắc muốn hủy kết bạn?', {
+          title: 'Hủy kết bạn',
+          confirmText: 'Hủy kết bạn',
+          cancelText: 'Đóng'
+        })
+      } else {
+        confirmed = confirm('Bạn có chắc muốn hủy kết bạn?')
+      }
+      
+      if (confirmed) {
         result = await friendsStore.removeFriend(authStore.user.uid, userId.value)
         if (result.success) {
           friendshipStatus.value = 'none'

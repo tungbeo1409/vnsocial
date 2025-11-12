@@ -14,6 +14,7 @@
   </TransitionGroup>
   
   <Toast />
+  <Confirm />
 </template>
 
 <script setup>
@@ -22,6 +23,7 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useMessagesStore } from '@/stores/messages'
 import Toast from '@/components/Toast.vue'
+import Confirm from '@/components/Confirm.vue'
 import FloatingChat from '@/components/FloatingChat.vue'
 import { chatBus } from '@/utils/chatBus'
 
@@ -80,7 +82,8 @@ const playMessageSound = () => {
 // Handler khi có tin nhắn mới - tự động mở popup
 const handleNewMessage = (fromUserId, message) => {
   // Kiểm tra xem tin nhắn có thực sự chưa đọc không
-  if (message && message.read === false && message.toUserId === authStore.user?.uid) {
+  // VÀ không phải tin nhắn do chính mình gửi (tránh phát âm thanh khi gửi tin nhắn)
+  if (message && message.read === false && message.toUserId === authStore.user?.uid && message.fromUserId !== authStore.user?.uid) {
     // Kiểm tra xem user có đang xem chat với người gửi không
     const isViewingThisChat = route.path === `/chat/${fromUserId}`
     
@@ -90,7 +93,7 @@ const handleNewMessage = (fromUserId, message) => {
     // Chỉ phát âm thanh nếu:
     // 1. Không đang xem chat với người gửi trong route
     // 2. Không có floating chat đang mở (hoặc có nhưng đang ở trang khác)
-    // Phát âm thanh để thông báo có tin nhắn mới
+    // 3. Không phát âm thanh khi gửi tin nhắn (đã check ở trên)
     if (!isViewingThisChat) {
       playMessageSound()
     }
@@ -128,7 +131,29 @@ watch(() => route.path, (newPath) => {
 }, { immediate: true })
 
 // Listen to chat bus for opening chats
+// Disable right-click context menu on entire app
+const disableContextMenu = (e) => {
+  e.preventDefault()
+  return false
+}
+
+const disableKeyboardShortcuts = (e) => {
+  // Disable F12 (DevTools), Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
+  if (e.key === 'F12' || 
+      (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J')) ||
+      (e.ctrlKey && e.key === 'U')) {
+    e.preventDefault()
+    return false
+  }
+}
+
 onMounted(() => {
+  // Disable context menu (right-click)
+  document.addEventListener('contextmenu', disableContextMenu)
+  
+  // Disable common keyboard shortcuts that open context menu
+  document.addEventListener('keydown', disableKeyboardShortcuts)
+  
   chatBus.onOpenChat(handleManualOpenChat)
   
   // Subscribe to unread messages để detect tin nhắn mới
@@ -146,6 +171,10 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  // Remove context menu disable listeners
+  document.removeEventListener('contextmenu', disableContextMenu)
+  document.removeEventListener('keydown', disableKeyboardShortcuts)
+  
   chatBus.offOpenChat(handleManualOpenChat)
   
   // Unsubscribe from unread messages

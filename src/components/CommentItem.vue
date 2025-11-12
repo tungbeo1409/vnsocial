@@ -547,7 +547,18 @@ const handleDelete = async () => {
     ? 'Bạn có chắc muốn xóa bình luận này? (Bạn là chủ bài viết)'
     : 'Bạn có chắc muốn xóa bình luận này?'
   
-  if (!confirm(deleteMessage)) {
+  let confirmed = false
+  if (window.showConfirm) {
+    confirmed = await window.showConfirm(deleteMessage, {
+      title: 'Xóa bình luận',
+      confirmText: 'Xóa',
+      cancelText: 'Hủy'
+    })
+  } else {
+    confirmed = confirm(deleteMessage)
+  }
+  
+  if (!confirmed) {
     return
   }
   

@@ -215,7 +215,16 @@ const handleReject = async (userId) => {
 }
 
 const handleRemoveFriend = async (userId) => {
-  if (!confirm('Bạn có chắc chắn muốn hủy kết bạn?')) return
+  if (window.showConfirm) {
+    const confirmed = await window.showConfirm('Bạn có chắc chắn muốn hủy kết bạn?', {
+      title: 'Hủy kết bạn',
+      confirmText: 'Hủy kết bạn',
+      cancelText: 'Đóng'
+    })
+    if (!confirmed) return
+  } else {
+    if (!confirm('Bạn có chắc chắn muốn hủy kết bạn?')) return
+  }
   
   actionLoading.value[userId] = true
   try {

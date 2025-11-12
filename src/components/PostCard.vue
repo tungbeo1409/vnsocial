@@ -454,7 +454,19 @@ const handleComment = async ({ content, fileData }) => {
 
 const handleDelete = async () => {
   showMenu.value = false
-  if (confirm('Bạn có chắc muốn xóa bài viết này?')) {
+  
+  let confirmed = false
+  if (window.showConfirm) {
+    confirmed = await window.showConfirm('Bạn có chắc muốn xóa bài viết này?', {
+      title: 'Xóa bài viết',
+      confirmText: 'Xóa',
+      cancelText: 'Hủy'
+    })
+  } else {
+    confirmed = confirm('Bạn có chắc muốn xóa bài viết này?')
+  }
+  
+  if (confirmed) {
     await postsStore.deletePost(props.post.id)
     if (window.showToast) {
       window.showToast('Đã xóa bài viết', 'success', '', 2000)
