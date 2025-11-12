@@ -20,10 +20,11 @@
         
         // Determine base path based on hostname
         // If localhost or 127.0.0.1, use '/' (development)
-        // Otherwise use '/vnsocial/' (GitHub Pages production)
+        // Otherwise use '/' for user page or '/vnsocial/' for project page
+        // ⚠️ Cập nhật basePath này cho khớp với vite.config.js
         var basePath = (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') 
           ? '/' 
-          : '/vnsocial/';
+          : '/'; // Thay đổi thành '/vnsocial/' nếu deploy ở project page
         
         // Get the route path (path after basePath)
         var routePath = pathname;
@@ -58,7 +59,7 @@
         if (!pathname.includes('index.html')) {
           var basePath = (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') 
             ? '/' 
-            : '/vnsocial/';
+            : '/'; // Thay đổi thành '/vnsocial/' nếu deploy ở project page
           var routePath = pathname;
           if (basePath !== '/' && routePath.startsWith(basePath)) {
             routePath = routePath.slice(basePath.length - 1);
